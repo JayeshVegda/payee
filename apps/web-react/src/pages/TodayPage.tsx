@@ -26,7 +26,12 @@ import {
   Inbox,
   CreditCard,
   ChevronRight,
-  HelpCircle
+  HelpCircle,
+  User,
+  Tag,
+  ChevronLeft,
+  ChevronDown,
+  LayoutGrid
 } from 'lucide-react';
 import { toast } from 'sonner';
 import DetailedEntryDrawer from '../components/payment-entry/DetailedEntryDrawer';
@@ -40,6 +45,8 @@ export default function TodayPage() {
   const [saving, setSaving] = useState(false);
   const [suggestionIndex, setSuggestionIndex] = useState(0);
   const [newPayeeConfirmed, setNewPayeeConfirmed] = useState(false);
+  const [duplicateConfirmed, setDuplicateConfirmed] = useState(false);
+  const [isStatusOpen, setIsStatusOpen] = useState(false);
 
   const [detailedOpen, setDetailedOpen] = useState(false);
   const [batchOpen, setBatchOpen] = useState(false);
@@ -200,9 +207,23 @@ export default function TodayPage() {
       .map((res) => res.item);
   }, [preview, master]);
 
+  // Frontend debounced duplicate detection (logged within last 5 minutes)
+  const isPossibleDuplicate = React.useMemo(() => {
+    if (!preview?.valid || todaysItems.length === 0) return false;
+    const latest = todaysItems[0]!;
+    
+    const payeeMatch = preview.payeeName?.toLowerCase() === latest.payeeName?.toLowerCase();
+    const amountMatch = preview.amountPaise === latest.amountPaise;
+    const methodMatch = preview.paymentMethodId === latest.paymentMethodId;
+    const categoryMatch = preview.categoryId === latest.categoryId;
+
+    return payeeMatch && amountMatch && methodMatch && categoryMatch;
+  }, [preview, todaysItems]);
+
   // Trigger quick entry preview
   const updatePreview = (cmdVal: string) => {
     setNewPayeeConfirmed(false);
+    setDuplicateConfirmed(false);
     setSuggestionIndex(0);
     if (previewTimerRef.current) {
       window.clearTimeout(previewTimerRef.current);
@@ -280,7 +301,8 @@ export default function TodayPage() {
     if (
       !preview?.valid ||
       saving ||
-      (preview.isNewPayee && similarPayees.length > 0 && !newPayeeConfirmed)
+      (preview.isNewPayee && similarPayees.length > 0 && !newPayeeConfirmed) ||
+      (isPossibleDuplicate && !duplicateConfirmed)
     ) {
       return;
     }
@@ -301,6 +323,7 @@ export default function TodayPage() {
 
       setCommand('');
       setPreview(null);
+      setDuplicateConfirmed(false);
       await Promise.all([refetchDashboard(), refetchTransactions()]);
 
       if (result.transaction.needsReview) {
@@ -345,6 +368,20 @@ export default function TodayPage() {
     ? Math.round(todaysItems.reduce((sum, item) => sum + item.amountPaise, 0) / todaysItems.length)
     : 0;
 
+  // Split Quick Payees list into Frequent and Recent groups
+  const frequentPayees = React.useMemo(() => {
+    return master?.payees?.filter((p) => p.favourite) || [];
+  }, [master]);
+
+  const recentPayees = React.useMemo(() => {
+    return master?.payees?.filter((p) => !p.favourite && p.paymentCount > 0)
+      .sort((a, b) => b.paymentCount - a.paymentCount)
+      .slice(0, 8) || [];
+  }, [master]);
+
+  // Determine whether to show the Purpose column
+  const hasAnyNotes = React.useMemo(() => todaysItems.some((item) => item.note?.trim()), [todaysItems]);
+
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
       {/* 1. Page Title & Action bar */}
@@ -386,6 +423,47 @@ export default function TodayPage() {
 
       {/* 2. Command Entry Box (MOVED TO TOP OF THE PAGE!) */}
       <div className="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden flex flex-col">
+        {/* Inline Structured Chips Row (Visually shows parsed tokens in real time) */}
+        <div className="flex flex-wrap items-center gap-3 px-4 py-2.5 bg-slate-50/50 border-b border-slate-100 select-none">
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mr-1">Parsed Fields</span>
+          
+          <div className={`flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-lg border font-semibold transition-colors duration-150 ${
+            preview?.payeeName
+              ? 'bg-blue-50 text-blue-800 border-blue-200'
+              : 'bg-white text-slate-400 border-slate-200 border-dashed'
+          }`}>
+            <User className="w-3.5 h-3.5 shrink-0" />
+            <span>Payee: {preview?.payeeName || '—'}</span>
+          </div>
+
+          <div className={`flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-lg border font-semibold transition-colors duration-150 ${
+            preview?.amountPaise
+              ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+              : 'bg-white text-slate-400 border-slate-200 border-dashed'
+          }`}>
+            <Banknote className="w-3.5 h-3.5 shrink-0" />
+            <span>Amount: {preview?.amountPaise ? formatInr(preview.amountPaise) : '—'}</span>
+          </div>
+
+          <div className={`flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-lg border font-semibold transition-colors duration-150 ${
+            preview?.paymentMethodName
+              ? 'bg-indigo-50 text-indigo-800 border-indigo-200'
+              : 'bg-white text-slate-400 border-slate-200 border-dashed'
+          }`}>
+            <CreditCard className="w-3.5 h-3.5 shrink-0" />
+            <span>Method: {preview?.paymentMethodName || '—'}</span>
+          </div>
+
+          <div className={`flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-lg border font-semibold transition-colors duration-150 ${
+            preview?.categoryName
+              ? 'bg-purple-50 text-purple-800 border-purple-200'
+              : 'bg-white text-slate-400 border-slate-200 border-dashed'
+          }`}>
+            <Tag className="w-3.5 h-3.5 shrink-0" />
+            <span>Category: {preview?.categoryName || '—'}</span>
+          </div>
+        </div>
+
         <div className="flex items-center h-14 bg-white relative">
           <span className="w-12 h-full border-r border-slate-100 text-slate-400 flex items-center justify-center text-xl font-bold select-none bg-slate-50/50">
             ₹
@@ -499,11 +577,14 @@ export default function TodayPage() {
                   {preview.transactionDate || todayDate || 'Today'} ·{' '}
                   {preview.transactionTime ? formatTime12(preview.transactionTime) : 'Now'}
                 </span>
-                <span className="truncate max-w-[200px]" title={preview.note ?? ''}>
-                  {preview.note || 'No purpose'}
-                </span>
+                {preview.note && (
+                  <span className="truncate max-w-[200px]" title={preview.note}>
+                    {preview.note}
+                  </span>
+                )}
               </div>
 
+              {/* Similar payee exists warnings */}
               {preview.isNewPayee && similarPayees.length > 0 && !newPayeeConfirmed && (
                 <div className="mt-2 p-2.5 bg-amber-50 border border-amber-200 rounded-lg pl-8 text-xs text-amber-900">
                   <strong className="font-bold block mb-1">Similar payees exist:</strong>
@@ -524,6 +605,23 @@ export default function TodayPage() {
                       Create “{preview.payeeName}” anyway
                     </button>
                   </div>
+                </div>
+              )}
+
+              {/* Debounced duplicate detection warnings block */}
+              {isPossibleDuplicate && (
+                <div className="mt-2 p-2.5 bg-rose-50 border border-rose-250 rounded-lg pl-8 text-xs text-rose-900">
+                  <strong className="font-bold block mb-1">⚠️ Similar transaction just logged in the last 5 minutes</strong>
+                  <p className="mb-2">A transaction with this exact payee, amount, category, and payment method was already saved.</p>
+                  <label className="flex items-center gap-2 cursor-pointer font-bold">
+                    <input
+                      type="checkbox"
+                      checked={duplicateConfirmed}
+                      onChange={(e) => setDuplicateConfirmed(e.target.checked)}
+                      className="rounded border-rose-350 text-rose-800 focus:ring-rose-500"
+                    />
+                    I confirm this is a separate, intentional transaction
+                  </label>
                 </div>
               )}
 
@@ -548,7 +646,8 @@ export default function TodayPage() {
               disabled={
                 !preview.valid ||
                 saving ||
-                (preview.isNewPayee && similarPayees.length > 0 && !newPayeeConfirmed)
+                (preview.isNewPayee && similarPayees.length > 0 && !newPayeeConfirmed) ||
+                (isPossibleDuplicate && !duplicateConfirmed)
               }
               className="btn btn-primary text-xs py-2 px-3 shrink-0 flex items-center gap-1 shadow-sm cursor-pointer"
             >
@@ -558,42 +657,43 @@ export default function TodayPage() {
           )}
         </div>
 
-        {/* Quick entry links row */}
-        <div className="px-5 py-3 flex flex-wrap items-center gap-1.5 bg-slate-50/20 border-t border-slate-100 select-none">
-          <span className="text-[11px] font-bold text-slate-400 mr-2 uppercase tracking-wider">Quick payees</span>
-          {master?.payees && master.payees.filter((p) => p.favourite || p.paymentCount > 0).length > 0 ? (
-            master.payees
-              .filter((p) => p.favourite || p.paymentCount > 0)
-              .sort((a, b) => {
-                if (a.favourite && !b.favourite) return -1;
-                if (!a.favourite && b.favourite) return 1;
-                return b.paymentCount - a.paymentCount;
-              })
-              .slice(0, 8)
-              .map((payee) => (
+        {/* 5. Separated Quick Payees (Frequent vs Recent) */}
+        <div className="px-5 py-3 flex flex-col gap-2.5 bg-slate-50/20 border-t border-slate-100 select-none">
+          {frequentPayees.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-[10px] font-bold text-slate-450 uppercase tracking-wider mr-2 w-16 text-left">Frequent</span>
+              {frequentPayees.map((payee) => (
                 <button
                   key={payee.id}
                   onClick={() => usePayee(payee.name)}
-                  className={`px-2.5 py-0.5 text-xs font-semibold rounded-md border transition-all duration-100 cursor-pointer ${
-                    payee.favourite
-                      ? 'bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100 hover:border-amber-350 shadow-3xs'
-                      : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50 hover:border-slate-355'
-                  }`}
+                  className="px-2.5 py-0.5 text-xs font-semibold rounded-md border bg-amber-50 text-amber-850 border-amber-250 hover:bg-amber-100 hover:border-amber-350 shadow-3xs cursor-pointer"
                 >
-                  {payee.favourite && <span className="text-amber-500 mr-0.5">★</span>}
+                  ★ {payee.name}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {recentPayees.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-[10px] font-bold text-slate-455 uppercase tracking-wider mr-2 w-16 text-left">Recent</span>
+              {recentPayees.map((payee) => (
+                <button
+                  key={payee.id}
+                  onClick={() => usePayee(payee.name)}
+                  className="px-2.5 py-0.5 text-xs font-semibold rounded-md border bg-white text-slate-700 border-slate-200 hover:bg-slate-50 hover:border-slate-350 cursor-pointer"
+                >
                   {payee.name}
                 </button>
-              ))
-          ) : (
-            <span className="text-[11px] text-slate-400 font-semibold">
-              Frequent or favourite payees will appear here as quick entry links.
-            </span>
+              ))}
+            </div>
           )}
         </div>
       </div>
 
-      {/* 3. Soft Metrics Cards (Positioned under the entry station!) */}
-      <section className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4" aria-label="Workstation totals">
+      {/* 3. Stat Cards (Wider 3-Column Layout with Outgoing Method Merge & Neutral 0-Review card) */}
+      <section className="grid grid-cols-1 md:grid-cols-3 gap-4" aria-label="Workstation totals">
+        {/* Total Outgoing Card */}
         <article className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs relative overflow-hidden group hover:border-ledger-blue/40 transition-colors">
           <div className="absolute top-0 left-0 w-1 h-full bg-ledger-blue" />
           <div className="flex items-center justify-between text-slate-500">
@@ -609,16 +709,30 @@ export default function TodayPage() {
           </div>
         </article>
 
-        <article className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs relative overflow-hidden group hover:border-amber-400 transition-colors">
-          <div className="absolute top-0 left-0 w-1 h-full bg-amber-500" />
+        {/* Outgoing by Method Merged Card (Cash vs Digital split bar, no daily limit captions) */}
+        <article className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs relative overflow-hidden group hover:border-slate-350 transition-colors">
+          <div className="absolute top-0 left-0 w-1 h-full bg-slate-400" />
           <div className="flex items-center justify-between text-slate-500">
-            <span className="text-xs font-bold uppercase tracking-wider">Cash Ledger</span>
-            <Banknote className="w-4 h-4 text-amber-55" />
+            <span className="text-xs font-bold uppercase tracking-wider">Outgoing by Method</span>
+            <CreditCard className="w-4 h-4 text-slate-500" />
           </div>
-          <strong className="text-2xl font-mono text-slate-900 tracking-tight mt-3 block tabular-nums">
-            {formatInr(dashboard?.cashPaise ?? 0)}
-          </strong>
-          <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden mt-3.5">
+          
+          <div className="grid grid-cols-2 gap-4 mt-3">
+            <div>
+              <span className="text-[10px] font-bold text-slate-400 block uppercase">Cash Outlay</span>
+              <span className="text-base font-mono font-bold text-slate-800 tabular-nums">
+                {formatInr(dashboard?.cashPaise ?? 0)}
+              </span>
+            </div>
+            <div>
+              <span className="text-[10px] font-bold text-slate-400 block uppercase">Digital Outlay</span>
+              <span className="text-base font-mono font-bold text-slate-800 tabular-nums">
+                {formatInr(dashboard?.digitalPaise ?? 0)}
+              </span>
+            </div>
+          </div>
+
+          <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden mt-3 flex">
             <div
               style={{
                 width: `${
@@ -627,21 +741,9 @@ export default function TodayPage() {
                     : 0
                 }%`
               }}
-              className="bg-amber-500 h-full rounded-full"
+              className="bg-amber-500 h-full transition-all duration-300"
+              title="Cash proportion"
             />
-          </div>
-        </article>
-
-        <article className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs relative overflow-hidden group hover:border-indigo-400 transition-colors">
-          <div className="absolute top-0 left-0 w-1 h-full bg-indigo-500" />
-          <div className="flex items-center justify-between text-slate-500">
-            <span className="text-xs font-bold uppercase tracking-wider">Digital Ledger</span>
-            <CreditCard className="w-4 h-4 text-indigo-500" />
-          </div>
-          <strong className="text-2xl font-mono text-slate-900 tracking-tight mt-3 block tabular-nums">
-            {formatInr(dashboard?.digitalPaise ?? 0)}
-          </strong>
-          <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden mt-3.5">
             <div
               style={{
                 width: `${
@@ -650,19 +752,32 @@ export default function TodayPage() {
                     : 0
                 }%`
               }}
-              className="bg-indigo-500 h-full rounded-full"
+              className="bg-indigo-500 h-full transition-all duration-300"
+              title="Digital proportion"
             />
+          </div>
+
+          <div className="flex justify-between items-center text-[10px] text-slate-500 mt-2.5 font-semibold">
+            <span className="flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+              Cash ({dashboard?.totalOutgoingPaise ? Math.round(((dashboard.cashPaise ?? 0) / dashboard.totalOutgoingPaise) * 100) : 0}%)
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
+              Digital ({dashboard?.totalOutgoingPaise ? Math.round(((dashboard.digitalPaise ?? 0) / dashboard.totalOutgoingPaise) * 100) : 0}%)
+            </span>
           </div>
         </article>
 
+        {/* Pending Reviews Card (Styled with neutral borders if 0/Clean) */}
         <article
           className={`border p-5 rounded-xl bg-white shadow-xs relative overflow-hidden transition-all ${
             dashboard?.reviewCount && dashboard.reviewCount > 0
-              ? 'border-amber-300 ring-1 ring-amber-100 shadow-[0_0_12px_rgba(245,158,11,0.04)]'
-              : 'border-slate-200 hover:border-rose-400'
+              ? 'border-amber-300 ring-1 ring-amber-100 shadow-[0_0_12px_rgba(245,158,11,0.04)] hover:border-amber-400'
+              : 'border-slate-200 hover:border-slate-350'
           }`}
         >
-          <div className="absolute top-0 left-0 w-1 h-full bg-rose-500" />
+          <div className={`absolute top-0 left-0 w-1 h-full ${dashboard?.reviewCount && dashboard.reviewCount > 0 ? 'bg-amber-500' : 'bg-slate-300'}`} />
           <div className="flex items-center justify-between text-slate-500">
             <span className={`text-xs font-bold uppercase tracking-wider ${dashboard?.reviewCount && dashboard.reviewCount > 0 ? 'text-amber-800' : ''}`}>
               Pending Reviews
@@ -675,24 +790,33 @@ export default function TodayPage() {
           <div className="flex items-center justify-between border-t border-slate-100 pt-2.5 mt-3 text-[10px] text-slate-500 font-semibold">
             <span>Requires category map</span>
             <span className={dashboard?.reviewCount && dashboard.reviewCount > 0 ? 'text-amber-700 font-bold' : ''}>
-              {dashboard?.reviewCount && dashboard.reviewCount > 0 ? 'Review Needed' : 'Clean'}
+              {dashboard?.reviewCount && dashboard.reviewCount > 0 ? 'Attention Needed' : 'Clean / Verified'}
             </span>
           </div>
         </article>
       </section>
 
-      {/* 4. Dashboard Table and Stats Grid */}
+      {/* 4. Dashboard Table and Collapsible Desk Stats Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Column (Outlay list) */}
-        <section className="lg:col-span-2 space-y-3">
+        {/* Outlay Ledger Table (Spans full page columns if Desk Status is collapsed!) */}
+        <section className={`space-y-3 transition-all duration-300 ${isStatusOpen ? 'lg:col-span-2' : 'lg:col-span-3'}`}>
           <div className="flex items-center justify-between pb-1">
             <h2 className="text-xs font-bold uppercase tracking-wider text-slate-900 flex items-center gap-1.5">
               <Clock className="w-3.5 h-3.5 text-slate-500" />
               Outlay Ledger
             </h2>
-            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider bg-white border border-slate-200 px-2 py-0.5 rounded-md">
-              {todaysItems.length} entries
-            </span>
+            <div className="flex items-center gap-3">
+              <span className="text-[10px] font-bold text-slate-505 uppercase tracking-wider bg-white border border-slate-200 px-2.5 py-0.5 rounded-md">
+                {todaysItems.length} entries
+              </span>
+              <button
+                onClick={() => setIsStatusOpen(!isStatusOpen)}
+                className="flex items-center gap-1 px-2.5 py-1 text-[10px] font-bold text-slate-600 hover:text-slate-900 border border-slate-200 bg-white rounded-md cursor-pointer transition-colors shadow-2xs"
+              >
+                <LayoutGrid className="w-3 h-3 text-slate-500" />
+                <span>{isStatusOpen ? 'Hide Stats' : 'Show Stats'}</span>
+              </button>
+            </div>
           </div>
 
           <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-xs">
@@ -702,11 +826,12 @@ export default function TodayPage() {
                   <thead>
                     <tr className="border-b border-slate-100 bg-slate-50/50 text-slate-500 font-semibold">
                       <th className="py-2.5 px-4 w-[16%] text-right font-bold">Amount</th>
-                      <th className="py-2.5 px-4 w-[28%] font-bold">Payee</th>
-                      <th className="py-2.5 px-4 w-[22%] font-bold">Category</th>
+                      <th className="py-2.5 px-4 w-[14%] font-bold">Time</th>
+                      <th className="py-2.5 px-4 w-[24%] font-bold">Payee</th>
+                      <th className="py-2.5 px-4 w-[20%] font-bold">Category</th>
                       <th className="py-2.5 px-4 w-[12%] font-bold">Method</th>
-                      <th className="py-2.5 px-4 w-[22%] font-bold">Purpose</th>
-                      <th className="py-2.5 px-4 text-right font-bold">Status</th>
+                      {hasAnyNotes && <th className="py-2.5 px-4 w-[20%] font-bold">Purpose</th>}
+                      <th className="py-2.5 px-4 w-[4%] text-right font-bold"></th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -714,15 +839,19 @@ export default function TodayPage() {
                       <tr
                         key={item.id}
                         onClick={() => setSelectedTransaction(item)}
-                        className="hover:bg-slate-50/80 cursor-pointer transition-colors group"
+                        className="hover:bg-slate-50/85 cursor-pointer transition-colors group"
+                        title="Click to view detailed audit logs"
                       >
                         <td className="py-3 px-4 text-right font-mono font-bold text-slate-950 group-hover:text-ledger-blue tabular-nums">
                           {formatInr(item.amountPaise)}
                         </td>
+                        <td className="py-3 px-4 text-slate-500 font-mono font-semibold tabular-nums">
+                          {formatTime12(item.transactionTime)}
+                        </td>
                         <td className="py-3 px-4 font-bold text-slate-900">
                           {item.payeeName}
                         </td>
-                        <td className="py-3 px-4 text-slate-600 font-semibold">
+                        <td className="py-3 px-4 text-slate-650 font-semibold">
                           {item.categoryName || (
                             <span className="text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 text-[10px]">
                               Review required
@@ -732,23 +861,28 @@ export default function TodayPage() {
                         <td className="py-3 px-4 text-slate-500 font-semibold uppercase font-mono text-[10px]">
                           {item.paymentMethodCode}
                         </td>
-                        <td className="py-3 px-4 text-slate-500 font-medium truncate max-w-[150px]">
-                          {item.note || '—'}
-                        </td>
+                        {hasAnyNotes && (
+                          <td className="py-3 px-4 text-slate-500 font-medium truncate max-w-[150px]">
+                            {item.note || <span className="text-slate-350 italic">None</span>}
+                          </td>
+                        )}
                         <td className="py-3 px-4 text-right">
-                          {item.needsReview ? (
-                            <span className="px-2 py-0.5 text-[9px] font-bold bg-amber-50 text-amber-700 rounded-full border border-amber-200">
-                              Review
-                            </span>
-                          ) : (
-                            <span className="px-2 py-0.5 text-[9px] font-bold bg-slate-100 text-slate-700 rounded-full border border-slate-200">
-                              Posted
-                            </span>
-                          )}
+                          <ChevronRight className="w-3.5 h-3.5 text-slate-350 group-hover:text-ledger-blue group-hover:translate-x-0.5 transition-all inline" />
                         </td>
                       </tr>
                     ))}
                   </tbody>
+                  {/* Running Total row at the bottom */}
+                  <tfoot className="border-t-2 border-slate-200 bg-slate-50/40 font-bold text-slate-950">
+                    <tr>
+                      <td className="py-2.5 px-4 text-right font-mono tabular-nums">
+                        {formatInr(todaysItems.reduce((sum, item) => sum + item.amountPaise, 0))}
+                      </td>
+                      <td className="py-2.5 px-4" colSpan={hasAnyNotes ? 6 : 5}>
+                        Total Outlays Today ({todaysItems.length} transactions)
+                      </td>
+                    </tr>
+                  </tfoot>
                 </table>
               </div>
             ) : (
@@ -761,55 +895,57 @@ export default function TodayPage() {
           </div>
         </section>
 
-        {/* Right Column (Desk Status) */}
-        <section className="space-y-6">
-          <div className="border-b border-slate-200/80 pb-1.5">
-            <h2 className="text-xs font-bold uppercase tracking-wider text-slate-900 flex items-center gap-1.5">
-              <Clock className="w-3.5 h-3.5 text-slate-500" />
-              Desk Status
-            </h2>
-          </div>
-
-          <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-4.5 shadow-xs">
-            <header className="border-b border-slate-100 pb-3">
-              <span className="text-[10px] uppercase font-bold text-slate-400 block">System Date</span>
-              <strong className="text-base font-bold text-slate-900 block mt-0.5">
-                {todayDate}
-              </strong>
-            </header>
-
-            <dl className="grid grid-cols-2 gap-y-4 text-xs font-semibold text-slate-500">
-              <div>
-                <dt className="font-bold text-slate-400 mb-0.5">First Entry</dt>
-                <dd className="text-slate-800 font-mono font-bold">{firstPaymentTime}</dd>
-              </div>
-              <div>
-                <dt className="font-bold text-slate-400 mb-0.5">Latest Entry</dt>
-                <dd className="text-slate-800 font-mono font-bold">{latestPaymentTime}</dd>
-              </div>
-              <div>
-                <dt className="font-bold text-slate-400 mb-0.5">Payees Paid</dt>
-                <dd className="text-slate-800 font-mono font-bold">{uniquePayees}</dd>
-              </div>
-              <div>
-                <dt className="font-bold text-slate-400 mb-0.5">Avg Size</dt>
-                <dd className="text-slate-800 font-mono font-bold tabular-nums">
-                  {formatInr(averagePayment)}
-                </dd>
-              </div>
-            </dl>
-
-            <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-1.5 text-[11px] text-slate-500 font-semibold">
-              <div className="flex items-center gap-1.5 text-slate-800 font-bold">
-                <HelpCircle className="w-4 h-4 text-slate-500 shrink-0" />
-                <span>Helpful Reminders</span>
-              </div>
-              <p className="leading-relaxed">
-                Click on any transaction logged today to show the audit logs drawer and correct or void details.
-              </p>
+        {/* Collapsible Desk Status Panel */}
+        {isStatusOpen && (
+          <section className="space-y-6 transition-all duration-300">
+            <div className="border-b border-slate-200/80 pb-1.5">
+              <h2 className="text-xs font-bold uppercase tracking-wider text-slate-900 flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5 text-slate-500" />
+                Desk Status
+              </h2>
             </div>
-          </div>
-        </section>
+
+            <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-4.5 shadow-xs">
+              <header className="border-b border-slate-100 pb-3">
+                <span className="text-[10px] uppercase font-bold text-slate-400 block">System Date</span>
+                <strong className="text-base font-bold text-slate-900 block mt-0.5">
+                  {todayDate}
+                </strong>
+              </header>
+
+              <dl className="grid grid-cols-2 gap-y-4 text-xs font-semibold text-slate-500">
+                <div>
+                  <dt className="font-bold text-slate-400 mb-0.5">First Entry</dt>
+                  <dd className="text-slate-800 font-mono font-bold">{firstPaymentTime}</dd>
+                </div>
+                <div>
+                  <dt className="font-bold text-slate-400 mb-0.5">Latest Entry</dt>
+                  <dd className="text-slate-800 font-mono font-bold">{latestPaymentTime}</dd>
+                </div>
+                <div>
+                  <dt className="font-bold text-slate-400 mb-0.5">Payees Paid</dt>
+                  <dd className="text-slate-800 font-mono font-bold">{uniquePayees}</dd>
+                </div>
+                <div>
+                  <dt className="font-bold text-slate-400 mb-0.5">Avg Size</dt>
+                  <dd className="text-slate-800 font-mono font-bold tabular-nums">
+                    {formatInr(averagePayment)}
+                  </dd>
+                </div>
+              </dl>
+
+              <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-1.5 text-[11px] text-slate-500 font-semibold">
+                <div className="flex items-center gap-1.5 text-slate-800 font-bold">
+                  <HelpCircle className="w-4 h-4 text-slate-500 shrink-0" />
+                  <span>Helpful Reminders</span>
+                </div>
+                <p className="leading-relaxed">
+                  Click on any transaction logged today to show the audit logs drawer and correct or void details.
+                </p>
+              </div>
+            </div>
+          </section>
+        )}
       </div>
 
       {/* Drawers and modals components */}

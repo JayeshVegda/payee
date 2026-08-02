@@ -28,7 +28,7 @@ test.describe('Keyboard-only Workflows', () => {
 
     // 4. Type command partially
     await entryInput.focus();
-    await page.keyboard.type('ramesh 850', { delay: 50 });
+    await page.keyboard.type('ramesh 950', { delay: 50 });
     
     // Wait for the autocomplete dropdown suggestion
     const suggestionBox = page.locator('[role="listbox"]');
@@ -49,7 +49,7 @@ test.describe('Keyboard-only Workflows', () => {
 
     // Confirm that the validation preview card is active
     await expect(page.getByText('Parsed payment')).toBeVisible();
-    await expect(page.locator('strong:has-text("Ramesh Kumar · ₹850")')).toBeVisible();
+    await expect(page.locator('strong:has-text("Ramesh Kumar · ₹950")')).toBeVisible();
 
     // 6. Press Enter again to finalize and post the payment transaction
     await page.keyboard.press('Enter');
