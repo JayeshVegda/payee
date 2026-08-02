@@ -20,11 +20,11 @@
   --ledger-blue: #2864c7;
   --ledger-blue-hover: #1f55ad;
   --ledger-selection: #e8f0fd;
-  --ledger-workspace: #f5f7fa;
+  --ledger-workspace: #fafafa;
   --ledger-surface: #ffffff;
-  --ledger-border: #dce3ee;
-  --ledger-muted: #66738d;
-  --ledger-review: #c33c54;
+  --ledger-border: #f1f5f9;
+  --ledger-muted: #64748b;
+  --ledger-review: #e11d48;
 
   /* Motion scales */
   --motion-fast: 120ms;
@@ -33,8 +33,8 @@
   --motion-ease: cubic-bezier(0.2, 0.7, 0.2, 1);
 
   /* Radius */
-  --radius-base: 8px;
-  --radius-container: 12px;
+  --radius-base: 10px;
+  --radius-container: 16px;
 
   /* Layout and sizing */
   --base-font-size: 15px;

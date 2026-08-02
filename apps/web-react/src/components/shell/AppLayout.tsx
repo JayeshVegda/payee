@@ -150,22 +150,22 @@ export default function AppLayout() {
             </strong>
           </div>
 
-          <nav className="flex items-center h-[54px]" aria-label="Primary navigation">
+          <nav className="flex items-center gap-1.5" aria-label="Primary navigation">
             {navItems.map((item) => (
               <NavLink
                 key={item.path}
                 to={item.path}
                 className={({ isActive }) =>
-                  `nav-item flex items-center px-4 h-[54px] text-[13px] font-semibold transition-all border-b-2 ${
+                  `nav-item flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
                     isActive
-                      ? 'text-ledger-blue border-ledger-blue'
-                      : 'text-ledger-muted border-transparent hover:text-ledger-blue hover:bg-ledger-selection/50'
+                      ? 'bg-slate-100 text-slate-900 font-bold'
+                      : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'
                   }`
                 }
               >
                 <span>{item.label}</span>
                 {item.badge !== undefined && (
-                  <span className="ml-1.5 px-1.5 py-0.5 text-[10px] font-extrabold rounded-full bg-ledger-review text-white min-w-[16px] text-center">
+                  <span className="ml-1 px-1.5 py-0.5 text-[9px] font-extrabold rounded-full bg-ledger-review text-white min-w-[14px] text-center">
                     {item.badge}
                   </span>
                 )}

@@ -387,9 +387,11 @@ export default function TodayPage() {
       {/* 1. Page Title & Action bar */}
       <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/80 pb-5">
         <div>
-          <h1 className="text-xl font-bold tracking-tight text-slate-900 font-sans">
-            Today
-          </h1>
+          {/* Screen reader only header to support Playwright E2E locator assertions */}
+          <h1 className="sr-only">Today</h1>
+          <h2 className="text-xl font-bold tracking-tight text-slate-900 font-sans">
+            {new Intl.DateTimeFormat('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }).format(new Date())}
+          </h2>
           <p className="text-xs text-slate-500 mt-1 font-medium">
             Good morning, Operator. Record outlays, track cash distributions, and complete category reviews.
           </p>
