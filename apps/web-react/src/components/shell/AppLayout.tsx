@@ -1,12 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { api, DashboardData } from '../../api/client';
-import { Circle } from 'lucide-react';
 
 export default function AppLayout() {
   const navigate = useNavigate();
-  const [now, setNow] = useState(new Date());
 
   // Query dashboard data to get the review count badge
   const { data: dashboard } = useQuery<DashboardData>({
@@ -14,12 +12,6 @@ export default function AppLayout() {
     queryFn: () => api<DashboardData>('/dashboard'),
     refetchInterval: 15000 // keep navigation badge updated
   });
-
-  // Keep clock updated
-  useEffect(() => {
-    const timer = setInterval(() => setNow(new Date()), 30000);
-    return () => clearInterval(timer);
-  }, []);
 
   // Keyboard navigation & chords
   useEffect(() => {
@@ -130,42 +122,27 @@ export default function AppLayout() {
     { label: 'System', path: '/system', key: '6' }
   ];
 
-  const formattedTime = new Intl.DateTimeFormat('en-IN', {
-    timeZone: 'Asia/Kolkata',
-    hour: '2-digit',
-    minute: '2-digit'
-  }).format(now);
-
   return (
-    <div className="payment-desk-shell min-h-screen flex flex-col bg-ledger-workspace text-ledger-ink">
-      <header className="top-navigation sticky top-0 z-50 flex items-center justify-between px-6 bg-white border-b border-ledger-border h-[54px] shadow-sm select-none">
-        <div className="flex items-center gap-6">
-          <div
-            onClick={() => navigate('/')}
-            className="top-brand flex items-center gap-2 font-bold cursor-pointer"
-          >
-            <span>₹</span>
-            <strong className="text-ledger-ink font-semibold tracking-tight text-[15px]">
-              Payment Desk
-            </strong>
-          </div>
-
-          <nav className="flex items-center gap-1.5" aria-label="Primary navigation">
+    <div className="min-h-screen flex flex-col bg-white text-slate-900 font-sans">
+      <main className="flex-1 w-full max-w-[1600px] mx-auto p-6 focus:outline-none flex flex-col">
+        {/* Centered Segmented Control Navigation Bar (No icons, no top header row, styled via Tailwind) */}
+        <div className="flex justify-center mb-8 select-none">
+          <nav className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl shadow-2xs" aria-label="Primary navigation">
             {navItems.map((item) => (
               <NavLink
                 key={item.path}
                 to={item.path}
                 className={({ isActive }) =>
-                  `nav-item flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+                  `flex items-center gap-1 px-4 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
                     isActive
-                      ? 'bg-slate-100 text-slate-900 font-bold'
-                      : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'
+                      ? 'bg-white text-slate-900 shadow-sm font-bold'
+                      : 'text-slate-500 hover:text-slate-800'
                   }`
                 }
               >
                 <span>{item.label}</span>
                 {item.badge !== undefined && (
-                  <span className="ml-1 px-1.5 py-0.5 text-[9px] font-extrabold rounded-full bg-ledger-review text-white min-w-[14px] text-center">
+                  <span className="ml-1 px-1.5 py-0.5 text-[9px] font-extrabold rounded-full bg-rose-600 text-white min-w-[14px] text-center">
                     {item.badge}
                   </span>
                 )}
@@ -174,17 +151,6 @@ export default function AppLayout() {
           </nav>
         </div>
 
-        <div className="top-status flex items-center gap-4 text-xs text-ledger-muted">
-          <div className="flex items-center gap-1.5 text-ledger-blue font-medium">
-            <Circle className="w-2 h-2 fill-current" />
-            <span>Local</span>
-          </div>
-          <div className="h-4 w-px bg-ledger-border" />
-          <time className="font-mono text-ledger-ink text-[12px]">{formattedTime}</time>
-        </div>
-      </header>
-
-      <main className="workspace flex-1 w-full max-w-[1600px] mx-auto p-6 focus:outline-none">
         <Outlet />
       </main>
     </div>
