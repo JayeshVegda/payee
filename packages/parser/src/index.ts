@@ -1,0 +1,218 @@
+const AMOUNT_TOKEN = /^(?<number>(?:\d+(?:\.\d+)?|\.\d+))\s*(?<suffix>k|l|lac|lakh)?$/i;
+
+export function normalizeLookupText(value: string): string {
+  return value
+    .normalize('NFKC')
+    .trim()
+    .toLocaleLowerCase('en-IN')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+export function parseAmountTokenToPaise(token: string): number | null {
+  const trimmed = token.trim().toLowerCase();
+  const usesLakh = /(?:l|lac|lakh)$/.test(trimmed);
+  const decimalLakh = usesLakh && /^\d,\d{1,2}\s*(?:l|lac|lakh)$/.test(trimmed);
+  const normalized = decimalLakh ? trimmed.replace(',', '.') : trimmed.replaceAll(',', '');
+  const match = AMOUNT_TOKEN.exec(normalized);
+  if (!match?.groups) return null;
+
+  const numericText = match.groups.number;
+  if (!numericText) return null;
+  const [whole = '0', fraction = ''] = numericText.split('.');
+  const suffix = match.groups.suffix?.toLowerCase();
+  const multiplierRupees =
+    suffix === 'k' ? 1_000 : suffix && ['l', 'lac', 'lakh'].includes(suffix) ? 100_000 : 1;
+  const decimalPlaces = fraction.length;
+  const numerator = BigInt(`${whole}${fraction}`) * BigInt(multiplierRupees) * 100n;
+  const denominator = 10n ** BigInt(decimalPlaces);
+
+  if (numerator % denominator !== 0n) return null;
+  const paise = numerator / denominator;
+  if (paise <= 0n || paise > BigInt(Number.MAX_SAFE_INTEGER)) return null;
+  return Number(paise);
+}
+
+export interface ParserPayee {
+  id: number;
+  name: string;
+  normalizedNames: string[];
+  defaultCategoryId: number | null;
+  defaultPaymentMethodId: number | null;
+}
+
+export interface ParserCategory {
+  id: number;
+  name: string;
+  normalizedNames: string[];
+}
+
+export interface ParserPaymentMethod {
+  id: number;
+  code: string;
+  displayName: string;
+  aliases: string[];
+}
+
+export interface QuickEntryContext {
+  payees: ParserPayee[];
+  categories: ParserCategory[];
+  paymentMethods: ParserPaymentMethod[];
+}
+
+export interface QuickEntryPreview {
+  command: string;
+  valid: boolean;
+  payeeId: number | null;
+  payeeName: string | null;
+  isNewPayee: boolean;
+  amountPaise: number | null;
+  categoryId: number | null;
+  categoryName: string | null;
+  paymentMethodId: number | null;
+  paymentMethodName: string | null;
+  transactionDate: string | null;
+  transactionTime: string | null;
+  note: string | null;
+  needsReview: boolean;
+  errors: string[];
+  warnings: string[];
+}
+
+function phraseContained(command: string, phrase: string): boolean {
+  return ` ${command} `.includes(` ${phrase} `);
+}
+
+function normalizeCommand(value: string): string {
+  return value
+    .normalize('NFKC')
+    .trim()
+    .toLocaleLowerCase('en-IN')
+    .replace(/[^\p{L}\p{N}.,:/-]+/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function removePhrase(command: string, phrase: string): string {
+  return normalizeCommand(` ${command} `.replace(` ${phrase} `, ' '));
+}
+
+export function parseQuickEntry(command: string, context: QuickEntryContext): QuickEntryPreview {
+  let remaining = normalizeCommand(command);
+  const errors: string[] = [];
+  const warnings: string[] = [];
+
+  const payeeMatches = context.payees
+    .flatMap((payee) =>
+      payee.normalizedNames
+        .filter((name) => name && phraseContained(remaining, name))
+        .map((name) => ({ payee, name }))
+    )
+    .sort((left, right) => right.name.length - left.name.length);
+  const longestPayeeLength = payeeMatches[0]?.name.length ?? 0;
+  const longestPayees = payeeMatches.filter((match) => match.name.length === longestPayeeLength);
+  const payeeIds = new Set(longestPayees.map((match) => match.payee.id));
+  let payee = payeeIds.size === 1 ? longestPayees[0]?.payee : undefined;
+  const matchedPayeeName = longestPayees[0]?.name ?? '';
+  if (!payee && payeeIds.size > 1) errors.push('Payee is ambiguous');
+  if (payee && longestPayees[0]) remaining = removePhrase(remaining, longestPayees[0].name);
+
+  const amountTokens = remaining.split(' ');
+  const amountCandidates: string[] = [];
+  for (let index = 0; index < amountTokens.length; index += 1) {
+    const token = amountTokens[index] ?? '';
+    const next = amountTokens[index + 1]?.toLowerCase();
+    if (next && ['l', 'lac', 'lakh'].includes(next)) {
+      amountCandidates.push(`${token} ${next}`);
+      index += 1;
+    } else {
+      amountCandidates.push(token);
+    }
+  }
+  const amountMatches = [...new Set(amountCandidates)]
+    .filter(Boolean)
+    .map((token) => ({ token, amountPaise: parseAmountTokenToPaise(token) }))
+    .filter((match): match is { token: string; amountPaise: number } => match.amountPaise !== null);
+  const amount = amountMatches.length === 1 ? amountMatches[0] : undefined;
+  if (!amount)
+    errors.push(amountMatches.length > 1 ? 'More than one amount found' : 'No valid amount found');
+  if (amount) remaining = removePhrase(remaining, amount.token);
+
+  let newPayeeName: string | null = null;
+  let forceNewPayee = false;
+  if (payee && amount) {
+    const normalizedOriginal = normalizeCommand(command);
+    const amountPosition = normalizedOriginal.indexOf(amount.token);
+    let identityPrefix =
+      amountPosition >= 0 ? normalizedOriginal.slice(0, amountPosition).trim() : '';
+    identityPrefix = identityPrefix
+      .replace(/\b(?:today|yesterday)\b/gi, '')
+      .replace(/\b\d{1,2}(?::\d{2})?\s*(?:am|pm)\b/gi, '')
+      .trim();
+    if (identityPrefix !== matchedPayeeName) {
+      payee = undefined;
+      forceNewPayee = true;
+      remaining = removePhrase(normalizedOriginal, amount.token);
+    }
+  }
+  if (!payee && (payeeIds.size === 0 || forceNewPayee) && amount) {
+    const amountPosition = normalizeCommand(command).indexOf(amount.token);
+    let prefix =
+      amountPosition >= 0 ? normalizeCommand(command).slice(0, amountPosition).trim() : '';
+    if (prefix.length >= 2 && !parseAmountTokenToPaise(prefix)) {
+      newPayeeName = prefix.replace(/\b(?:today|yesterday)\b/gi, '').trim();
+      if (newPayeeName) remaining = removePhrase(remaining, newPayeeName);
+    }
+    if (!newPayeeName) errors.push('Enter a payee name before the amount');
+  }
+
+  const methodMatches = context.paymentMethods.flatMap((method) =>
+    method.aliases
+      .filter((alias) => phraseContained(remaining, alias))
+      .map((alias) => ({ method, alias }))
+  );
+  const explicitMethod = methodMatches.length === 1 ? methodMatches[0] : undefined;
+  if (methodMatches.length > 1) errors.push('Payment method is ambiguous');
+  if (explicitMethod) remaining = removePhrase(remaining, explicitMethod.alias);
+  const cashMethod = context.paymentMethods.find((method) => method.code === 'cash');
+  // Cash is the desk-wide default. A different method must be written explicitly.
+  const paymentMethodId = explicitMethod?.method.id ?? cashMethod?.id ?? null;
+  const paymentMethod = context.paymentMethods.find((method) => method.id === paymentMethodId);
+
+  const categoryMatches = context.categories
+    .flatMap((category) =>
+      category.normalizedNames
+        .filter((name) => name && phraseContained(remaining, name))
+        .map((name) => ({ category, name }))
+    )
+    .sort((left, right) => right.name.length - left.name.length);
+  const category = categoryMatches[0]?.category;
+  if (categoryMatches[0]) remaining = removePhrase(remaining, categoryMatches[0].name);
+  const categoryId = category?.id ?? payee?.defaultCategoryId ?? null;
+  const resolvedCategory = context.categories.find((entry) => entry.id === categoryId);
+
+  if (newPayeeName) warnings.push('New payee created from quick entry');
+  if (!paymentMethodId) warnings.push('Payment method needs review');
+  if (!categoryId) warnings.push('Category needs review');
+  const needsReview = warnings.length > 0;
+
+  return {
+    command,
+    valid: errors.length === 0,
+    payeeId: payee?.id ?? null,
+    payeeName: payee?.name ?? newPayeeName,
+    isNewPayee: Boolean(newPayeeName),
+    amountPaise: amount?.amountPaise ?? null,
+    categoryId,
+    categoryName: resolvedCategory?.name ?? null,
+    paymentMethodId,
+    paymentMethodName: paymentMethod?.displayName ?? null,
+    transactionDate: null,
+    transactionTime: null,
+    note: remaining || null,
+    needsReview,
+    errors,
+    warnings
+  };
+}

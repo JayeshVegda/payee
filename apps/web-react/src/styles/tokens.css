@@ -1,0 +1,42 @@
+@font-face {
+  font-family: 'Geist Sans';
+  src: url('/fonts/Geist-Variable.woff2') format('woff2-variations');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Geist Mono';
+  src: url('/fonts/GeistMono-Variable.woff2') format('woff2-variations');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  /* Ledger OS specific palette variables */
+  --ledger-ink: #10213f;
+  --ledger-blue: #2864c7;
+  --ledger-blue-hover: #1f55ad;
+  --ledger-selection: #e8f0fd;
+  --ledger-workspace: #f5f7fa;
+  --ledger-surface: #ffffff;
+  --ledger-border: #dce3ee;
+  --ledger-muted: #66738d;
+  --ledger-review: #c33c54;
+
+  /* Motion scales */
+  --motion-fast: 120ms;
+  --motion-base: 180ms;
+  --motion-slow: 260ms;
+  --motion-ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+
+  /* Radius */
+  --radius-base: 8px;
+  --radius-container: 12px;
+
+  /* Layout and sizing */
+  --base-font-size: 15px;
+  --base-line-height: 1.45;
+}

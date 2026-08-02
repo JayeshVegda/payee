@@ -1,0 +1,223 @@
+@import "tailwindcss";
+@import "./tokens.css";
+
+@theme {
+  --font-sans: "Geist Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, monospace;
+
+  --color-ledger-ink: var(--ledger-ink);
+  --color-ledger-blue: var(--ledger-blue);
+  --color-ledger-blue-hover: var(--ledger-blue-hover);
+  --color-ledger-selection: var(--ledger-selection);
+  --color-ledger-workspace: var(--ledger-workspace);
+  --color-ledger-surface: var(--ledger-surface);
+  --color-ledger-border: var(--ledger-border);
+  --color-ledger-muted: var(--ledger-muted);
+  --color-ledger-review: var(--ledger-review);
+
+  --animate-fast: var(--motion-fast) var(--motion-ease);
+  --animate-base: var(--motion-base) var(--motion-ease);
+  --animate-slow: var(--motion-slow) var(--motion-ease);
+}
+
+/* Global resets & typography */
+body {
+  font-family: var(--font-sans);
+  background-color: var(--ledger-workspace);
+  color: var(--ledger-ink);
+  font-size: var(--base-font-size);
+  line-height: var(--base-line-height);
+  margin: 0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Tabular numerals for money and numbers */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Focus styling */
+:focus-visible {
+  outline: 2px solid var(--ledger-blue) !important;
+  outline-offset: 1px;
+}
+
+/* Keyboard desktop feel visual system */
+.payment-desk-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.top-navigation {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  height: 54px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24px;
+  border-bottom: 1px solid var(--ledger-border);
+  background-color: var(--ledger-surface);
+}
+
+.top-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  color: var(--ledger-ink);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.top-brand span {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  background-color: var(--ledger-blue);
+  color: white;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.top-navigation nav {
+  display: flex;
+  align-items: stretch;
+  height: 100%;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  height: 54px;
+  color: var(--ledger-muted);
+  font-size: 14px;
+  font-weight: 550;
+  text-decoration: none;
+  border-bottom: 2px solid transparent;
+  transition: all var(--motion-fast) var(--motion-ease);
+}
+
+.nav-item:hover {
+  color: var(--ledger-blue);
+  background-color: var(--ledger-selection);
+}
+
+.nav-item.active {
+  color: var(--ledger-blue);
+  border-bottom-color: var(--ledger-blue);
+}
+
+.top-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--ledger-muted);
+}
+
+.workspace {
+  flex: 1;
+  padding: 20px 24px;
+  max-width: 1600px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+/* Card components */
+.ledger-card {
+  background-color: var(--ledger-surface);
+  border: 1px solid var(--ledger-border);
+  border-radius: var(--radius-container);
+  padding: 18px;
+  box-shadow: 0 1px 3px rgba(16, 33, 63, 0.05);
+}
+
+/* Keyboard help overlays and tags */
+kbd {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 2px 4px;
+  background-color: var(--ledger-workspace);
+  border: 1px solid var(--ledger-border);
+  border-radius: 4px;
+  color: var(--ledger-muted);
+}
+
+/* Forms */
+.form-input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--ledger-border);
+  border-radius: var(--radius-base);
+  background-color: var(--ledger-surface);
+  color: var(--ledger-ink);
+  font-size: 14px;
+  transition: border-color var(--motion-fast) var(--motion-ease);
+}
+
+.form-input:focus {
+  border-color: var(--ledger-blue);
+  outline: none;
+}
+
+/* Custom buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 14px;
+  font-size: 14px;
+  font-weight: 550;
+  border-radius: var(--radius-base);
+  cursor: pointer;
+  transition: all var(--motion-fast) var(--motion-ease);
+  border: 1px solid transparent;
+}
+
+.btn-primary {
+  background-color: var(--ledger-blue);
+  color: white;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background-color: var(--ledger-blue-hover);
+}
+
+.btn-secondary {
+  background-color: var(--ledger-surface);
+  border-color: var(--ledger-border);
+  color: var(--ledger-ink);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background-color: var(--ledger-workspace);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: var(--ledger-workspace);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--ledger-border);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--ledger-muted);
+}

@@ -1,0 +1,19 @@
+{
+  "name": "@payment-ledger/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "tsc -b",
+    "dev": "tsx watch src/index.ts --port=4783"
+  },
+  "dependencies": {
+    "@hono/node-server": "2.0.12",
+    "@payment-ledger/core": "workspace:*",
+    "@payment-ledger/database": "workspace:*",
+    "@payment-ledger/parser": "workspace:*",
+    "@payment-ledger/shared": "workspace:*",
+    "hono": "4.12.33"
+  }
+}
