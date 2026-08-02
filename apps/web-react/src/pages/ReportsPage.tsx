@@ -1,11 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { api, formatInr, post, queryString, rupeesToPaise } from '../api/client';
-import { Download, RefreshCw, Calendar } from 'lucide-react';
+import { api, formatInr, queryString } from '../api/client';
+import { Download, RefreshCw, AlertTriangle, Sparkles, TrendingUp, BarChart3, Receipt } from 'lucide-react';
 import { toast } from 'sonner';
-import TransactionDetailDrawer from '../components/transactions/TransactionDetailDrawer';
+import { TransactionDrawer } from '../components/common/TransactionDrawer';
 
-// Lazy load ECharts implementation to keep the bundle size small
 const ReportCharts = React.lazy(() => import('../components/reports/ReportCharts'));
 
 interface GroupRow {
@@ -52,15 +51,13 @@ export default function ReportsPage() {
   const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
   const [from, setFrom] = useState(`${today.slice(0, 8)}01`);
   const [to, setTo] = useState(today);
-  const [selectedTxId, setSelectedTxId] = useState<number | null>(null);
-  const [backupMessage, setBackupMessage] = useState('');
+  const [selectedTx, setSelectedTx] = useState<any | null>(null);
 
   // Fetch report data
   const {
     data,
     isLoading: loading,
-    refetch,
-    isError
+    refetch
   } = useQuery<ReportsData>({
     queryKey: ['reports-data', from, to],
     queryFn: () => api<ReportsData>(`/reports${queryString({ from, to })}`),
@@ -73,7 +70,6 @@ export default function ReportsPage() {
   };
 
   const setRangePreset = (days: number | 'month' | 'six-months') => {
-    const end = new Date();
     if (days === 'month') {
       setFrom(`${today.slice(0, 8)}01`);
     } else {
@@ -81,7 +77,7 @@ export default function ReportsPage() {
       if (days === 'six-months') {
         start.setMonth(start.getMonth() - 6);
       } else {
-        start.setDate(start.getDate() - days + 1);
+        start.setDate(start.getDate() - (days as number) + 1);
       }
       const localFrom = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(start);
       setFrom(localFrom);
@@ -89,513 +85,274 @@ export default function ReportsPage() {
     setTo(today);
   };
 
-  const handleBackup = async () => {
-    try {
-      const result = await post<{ filename: string; integrity: string }>('/system/backup', {});
-      setBackupMessage(`${result.filename} created and verified.`);
-      toast.success('Verified backup created successfully.');
-    } catch (caught) {
-      toast.error(caught instanceof Error ? caught.message : 'Backup could not be created');
-    }
+  const handleExportCsv = () => {
+    window.open(`/api/export/transactions.csv${queryString({ from, to })}`, '_blank');
+    toast.success('Downloading report CSV...');
   };
 
-  const averageActiveDay = data?.totals.activeDayCount
-    ? Math.round(data.totals.totalPaise / data.totals.activeDayCount)
-    : 0;
+  const totals = data?.totals || {
+    totalPaise: 0,
+    paymentCount: 0,
+    payeeCount: 0,
+    activeDayCount: 0,
+    averageTransactionPaise: 0
+  };
 
-  const cashTotal = data?.methods.find((row) => row.code === 'cash')?.totalPaise ?? 0;
-  const cashShare = data?.totals.totalPaise
-    ? Math.round((cashTotal / data.totals.totalPaise) * 100)
-    : 0;
-
-  const topCategory = data?.categories[0] ?? null;
-
-  const categoryColors = ['#16274d', '#6c97d6', '#2b5dab', '#a3bfe8', '#1e3d73', '#cbdbf3', '#3b72c4', '#e4edfb'];
+  const maxCategoryPaise = data?.categories?.[0]?.totalPaise || 1;
+  const maxMethodPaise = data?.methods?.[0]?.totalPaise || 1;
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <header className="flex items-center justify-between">
+    <div className="space-y-8">
+      {/* 1. Page Title Header */}
+      <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-stone-200/40 pb-6">
         <div>
-          <h1 className="text-xl font-bold tracking-tight text-ledger-ink font-sans">
-            Reports
-          </h1>
+          <h2 className="text-2xl font-bold tracking-tight text-stone-900 font-sans">
+            Reports & Analytics
+          </h2>
+          <p className="text-xs text-stone-500 mt-1 font-medium">Spending trends, category breakdowns, and audit insights.</p>
         </div>
-        <div className="flex gap-2">
-          <a
-            href={`/api/export/transactions.csv${queryString({ from, to })}`}
-            className="btn btn-secondary text-xs flex items-center gap-1.5 py-1.5 px-3 bg-white"
-          >
-            <Download className="w-3.5 h-3.5" />
-            Export CSV
-          </a>
+
+        <div className="flex items-center gap-2">
           <button
-            onClick={() => window.print()}
-            className="btn btn-secondary text-xs flex items-center gap-1.5 py-1.5 px-3 bg-white"
+            onClick={handleRefresh}
+            className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-stone-600 hover:text-stone-900 hover:bg-stone-100/60 border border-stone-200 rounded-lg transition-all duration-150 cursor-pointer bg-white"
+            title="Refresh reports"
           >
-            Print Summary
+            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+          </button>
+
+          <button
+            onClick={handleExportCsv}
+            className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-stone-600 hover:text-stone-900 hover:bg-stone-100/60 border border-stone-200 rounded-lg transition-all duration-150 cursor-pointer bg-white"
+          >
+            <Download size={14} />
+            <span>Export CSV</span>
           </button>
         </div>
       </header>
 
-      {/* Range controls */}
-      <section className="ledger-card p-4 border-ledger-border bg-white flex flex-col md:flex-row md:items-center justify-between gap-4 text-xs font-semibold text-ledger-ink select-none">
-        <div className="flex flex-wrap gap-2">
-          {(
-            [
-              [7, '7 days'],
-              [30, '30 days'],
-              ['month', 'This month'],
-              ['six-months', '6 months']
-            ] as const
-          ).map(([preset, label]) => (
+      {/* Date Range Selector Bar */}
+      <div className="bg-white p-4 rounded-xl shadow-[0_1px_2px_rgba(0,0,0,0.04),0_1px_8px_rgba(0,0,0,0.03)] border border-[#E5E7EB]/50 flex flex-col md:flex-row items-center justify-between gap-4 select-none">
+        <div className="flex items-center gap-3">
+          <span className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">Presets</span>
+          <div className="flex items-center gap-1.5">
             <button
-              key={label}
-              onClick={() => setRangePreset(preset)}
-              className="px-2.5 py-1.5 border border-ledger-border hover:border-ledger-blue hover:text-ledger-blue bg-white rounded-md transition-colors"
+              onClick={() => setRangePreset('month')}
+              className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-stone-100 hover:bg-blue-50 hover:text-[#2563EB] text-stone-600 transition-colors border-none cursor-pointer"
             >
-              {label}
+              This Month
             </button>
-          ))}
+            <button
+              onClick={() => setRangePreset(30)}
+              className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-stone-100 hover:bg-blue-50 hover:text-[#2563EB] text-stone-600 transition-colors border-none cursor-pointer"
+            >
+              Last 30 Days
+            </button>
+            <button
+              onClick={() => setRangePreset('six-months')}
+              className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-stone-100 hover:bg-blue-50 hover:text-[#2563EB] text-stone-600 transition-colors border-none cursor-pointer"
+            >
+              Last 6 Months
+            </button>
+          </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
-          <label className="flex items-center gap-2">
-            <span className="text-ledger-muted font-medium">From</span>
-            <input
-              type="date"
-              value={from}
-              onChange={(e) => setFrom(e.target.value)}
-              className="form-input py-1 text-xs font-medium"
-            />
-          </label>
-          <span className="text-ledger-muted select-none">→</span>
-          <label className="flex items-center gap-2">
-            <span className="text-ledger-muted font-medium">To</span>
-            <input
-              type="date"
-              value={to}
-              onChange={(e) => setTo(e.target.value)}
-              className="form-input py-1 text-xs font-medium"
-            />
-          </label>
-          <button
-            onClick={handleRefresh}
-            disabled={loading}
-            className="btn btn-primary text-xs py-1.5 px-4 flex items-center gap-1 hover:shadow-xs"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-            Apply
-          </button>
+        <div className="flex items-center gap-2.5 w-full md:w-auto">
+          <input
+            type="date"
+            value={from}
+            onChange={(e) => setFrom(e.target.value)}
+            className="h-9 px-3 text-xs font-semibold rounded-lg border border-stone-200 bg-white text-stone-900 outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all w-36"
+          />
+          <span className="text-[10px] font-bold text-stone-400 uppercase">TO</span>
+          <input
+            type="date"
+            value={to}
+            onChange={(e) => setTo(e.target.value)}
+            className="h-9 px-3 text-xs font-semibold rounded-lg border border-stone-200 bg-white text-stone-900 outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all w-36"
+          />
+        </div>
+      </div>
+
+      {/* Hero Stat Grid */}
+      <section className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        {/* TOTAL OUTGOING Hero Stat Card */}
+        <article className="md:col-span-2 bg-white rounded-xl p-6 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_1px_8px_rgba(0,0,0,0.03)] border border-stone-100/40 relative overflow-hidden transition-all duration-200 hover:shadow-md flex flex-col justify-between min-h-[140px]">
+          <div className="flex items-start justify-between">
+            <div className="space-y-1">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-stone-400">Total Outgoing</span>
+              <strong className="text-3xl font-mono text-stone-900 tracking-tight block py-1.5 tabular-nums">
+                {formatInr(totals.totalPaise)}
+              </strong>
+            </div>
+            <span className="w-10 h-10 rounded-full bg-blue-50 text-[#2563EB] flex items-center justify-center shrink-0">
+              <TrendingUp className="w-5 h-5" />
+            </span>
+          </div>
+
+          <div className="flex items-center justify-between border-t border-stone-100/60 pt-3.5 mt-3 text-[10px] text-stone-500 font-semibold">
+            <span>Active Days: <strong className="text-stone-900">{totals.activeDayCount}</strong></span>
+            <span>Unique Payees: <strong className="text-stone-900">{totals.payeeCount}</strong></span>
+          </div>
+        </article>
+
+        {/* Avg Transaction Stat */}
+        <article className="bg-white rounded-xl p-6 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_1px_8px_rgba(0,0,0,0.03)] border border-stone-100/40 relative overflow-hidden transition-all duration-200 hover:shadow-md flex flex-col justify-between min-h-[140px]">
+          <div className="flex items-start justify-between">
+            <div className="space-y-1">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-stone-400">Avg Payment Size</span>
+              <strong className="text-2xl font-mono text-stone-900 tracking-tight block py-1.5 tabular-nums">
+                {formatInr(totals.averageTransactionPaise)}
+              </strong>
+            </div>
+            <span className="w-10 h-10 rounded-full bg-purple-50 text-purple-600 flex items-center justify-center shrink-0">
+              <Receipt className="w-5 h-5" />
+            </span>
+          </div>
+          <p className="text-[10px] text-stone-450 mt-3 font-semibold">Per single ledger entry</p>
+        </article>
+
+        {/* Total Payments Count */}
+        <article className="bg-white rounded-xl p-6 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_1px_8px_rgba(0,0,0,0.03)] border border-stone-100/40 relative overflow-hidden transition-all duration-200 hover:shadow-md flex flex-col justify-between min-h-[140px]">
+          <div className="flex items-start justify-between">
+            <div className="space-y-1">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-stone-400">Payment Count</span>
+              <strong className="text-2xl font-mono text-stone-900 tracking-tight block py-1.5 tabular-nums">
+                {totals.paymentCount}
+              </strong>
+            </div>
+            <span className="w-10 h-10 rounded-full bg-amber-50 text-[#F79009] flex items-center justify-center shrink-0">
+              <BarChart3 className="w-5 h-5" />
+            </span>
+          </div>
+          <p className="text-[10px] text-stone-450 mt-3 font-semibold">Recorded entries in period</p>
+        </article>
+      </section>
+
+      {/* Interactive ECharts Visual Breakdown */}
+      {data && (
+        <section className="bg-white rounded-xl p-6 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_1px_8px_rgba(0,0,0,0.03)] border border-[#E5E7EB]/50 overflow-hidden">
+          <React.Suspense fallback={<div className="h-64 bg-stone-50/50 rounded-lg animate-pulse" />}>
+            <ReportCharts daily={data.daily} categories={data.categories} />
+          </React.Suspense>
+        </section>
+      )}
+
+      {/* Proportional Bars Breakdown for Categories & Methods */}
+      <section className="grid grid-cols-1 md:grid-cols-2 gap-6" aria-label="Breakdowns">
+        {/* Categories Proportional Bars */}
+        <div className="bg-white p-6 rounded-xl shadow-[0_1px_2px_rgba(0,0,0,0.04),0_1px_8px_rgba(0,0,0,0.03)] border border-stone-100/50 space-y-5">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-stone-900">Category Performance</h3>
+          <div className="space-y-3.5">
+            {data?.categories.slice(0, 6).map((cat, idx) => {
+              const pct = Math.round((cat.totalPaise / maxCategoryPaise) * 100);
+              return (
+                <div key={idx} className="space-y-1.5">
+                  <div className="flex items-center justify-between text-xs font-semibold">
+                    <span className="text-stone-850">{cat.label}</span>
+                    <span className="tabular-nums font-bold text-stone-900">{formatInr(cat.totalPaise)}</span>
+                  </div>
+                  <div className="w-full bg-stone-100 h-1.5 rounded-full overflow-hidden">
+                    <div className="bg-[#2563EB] h-full rounded-full transition-all duration-300" style={{ width: `${pct}%` }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Methods Proportional Bars */}
+        <div className="bg-white p-6 rounded-xl shadow-[0_1px_2px_rgba(0,0,0,0.04),0_1px_8px_rgba(0,0,0,0.03)] border border-stone-100/50 space-y-5">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-stone-900">Payment Methods</h3>
+          <div className="space-y-3.5">
+            {data?.methods.map((method, idx) => {
+              const pct = Math.round((method.totalPaise / maxMethodPaise) * 100);
+              return (
+                <div key={idx} className="space-y-1.5">
+                  <div className="flex items-center justify-between text-xs font-semibold">
+                    <span className="text-stone-850">{method.label}</span>
+                    <span className="tabular-nums font-bold text-stone-900">{formatInr(method.totalPaise)}</span>
+                  </div>
+                  <div className="w-full bg-stone-100 h-1.5 rounded-full overflow-hidden">
+                    <div className="bg-emerald-600 h-full rounded-full transition-all duration-300" style={{ width: `${pct}%` }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       </section>
 
-      {isError && (
-        <div className="p-3 text-xs bg-ledger-review/10 border border-ledger-review/20 text-ledger-review rounded-md">
-          Failed to load reports. Is apps/server running?
-        </div>
-      )}
+      {/* Insights Section */}
+      <section className="grid grid-cols-1 md:grid-cols-2 gap-6" aria-label="Insights & Patterns">
+        {/* Unusually High Card */}
+        <div className="bg-white p-6 rounded-xl shadow-[0_1px_2px_rgba(0,0,0,0.04),0_1px_8px_rgba(0,0,0,0.03)] border border-stone-100/50 space-y-5">
+          <div className="flex items-center gap-3">
+            <span className="w-8 h-8 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+              <AlertTriangle size={16} />
+            </span>
+            <h3 className="text-xs font-bold uppercase tracking-wider text-stone-900">Unusually High Transactions</h3>
+          </div>
 
-      {data && (
-        <>
-          {/* Hero stats grid */}
-          <section className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <article className="ledger-card flex flex-col justify-between py-4 border-ledger-border bg-white shadow-xs">
-              <span className="text-xs font-semibold text-ledger-muted">Total outgoing</span>
-              <strong className="text-xl font-mono text-ledger-ink tracking-tight mt-1.5 tabular-nums">
-                {formatInr(data.totals.totalPaise)}
-              </strong>
-              <span className="text-[10px] text-ledger-muted mt-0.5 truncate font-medium">
-                {from} – {to}
-              </span>
-            </article>
-
-            <article className="ledger-card flex flex-col justify-between py-4 border-ledger-border bg-white shadow-xs">
-              <span className="text-xs font-semibold text-ledger-muted">Average active day</span>
-              <strong className="text-xl font-mono text-ledger-ink tracking-tight mt-1.5 tabular-nums">
-                {formatInr(averageActiveDay)}
-              </strong>
-              <span className="text-[10px] text-ledger-muted mt-0.5 font-medium">
-                {data.totals.activeDayCount} active payment days
-              </span>
-            </article>
-
-            <article className="ledger-card flex flex-col justify-between py-4 border-ledger-border bg-white shadow-xs">
-              <span className="text-xs font-semibold text-ledger-muted">Average payment</span>
-              <strong className="text-xl font-mono text-ledger-ink tracking-tight mt-1.5 tabular-nums">
-                {formatInr(data.totals.averageTransactionPaise)}
-              </strong>
-              <span className="text-[10px] text-ledger-muted mt-0.5 font-medium">
-                {data.totals.paymentCount} total transactions
-              </span>
-            </article>
-
-            <article className="ledger-card flex flex-col justify-between py-4 border-ledger-border bg-white shadow-xs">
-              <span className="text-xs font-semibold text-ledger-muted">Paid in Cash</span>
-              <strong className="text-xl font-mono text-ledger-ink tracking-tight mt-1.5 tabular-nums">
-                {formatInr(cashTotal)}
-              </strong>
-              <span className="text-[10px] text-ledger-muted mt-0.5 font-medium">
-                {cashShare}% of total spending
-              </span>
-            </article>
-          </section>
-
-          {/* Insights strip */}
-          <section className="grid grid-cols-1 sm:grid-cols-3 gap-4 py-3 bg-ledger-workspace/30 border-y border-ledger-border/40 select-none">
-            <div className="px-4 py-1 text-center sm:text-left">
-              <span className="text-[10px] text-ledger-muted font-bold uppercase block">Largest Category</span>
-              <strong className="text-sm font-semibold text-ledger-ink block mt-0.5 leading-tight">
-                {topCategory?.label || 'No data'}
-              </strong>
-              <small className="text-[10px] text-ledger-muted font-mono block mt-0.5 tabular-nums">
-                {topCategory ? formatInr(topCategory.totalPaise) : '—'}
-              </small>
-            </div>
-            <div className="px-4 py-1 text-center sm:text-left border-y sm:border-y-0 sm:border-x border-ledger-border/50">
-              <span className="text-[10px] text-ledger-muted font-bold uppercase block">Unique Payees Paid</span>
-              <strong className="text-sm font-semibold text-ledger-ink block mt-0.5 leading-tight">
-                {data.totals.payeeCount}
-              </strong>
-              <small className="text-[10px] text-ledger-muted block mt-0.5 font-medium">
-                Distinct payees in date range
-              </small>
-            </div>
-            <div className="px-4 py-1 text-center sm:text-left">
-              <span className="text-[10px] text-ledger-muted font-bold uppercase block">Highest Single Payment</span>
-              <strong className="text-sm font-mono font-bold text-ledger-ink block mt-0.5 tabular-nums">
-                {formatInr(data.largest[0]?.amountPaise || 0)}
-              </strong>
-              <small className="text-[10px] text-ledger-muted block mt-0.5 font-medium truncate">
-                {data.largest[0]?.payeeName || 'No payments yet'}
-              </small>
-            </div>
-          </section>
-
-          {/* Lazy loaded ECharts Visualizations */}
-          <React.Suspense
-            fallback={
-              <div className="py-16 text-center text-xs text-ledger-muted font-semibold bg-white border border-ledger-border rounded-xl">
-                Loading ECharts dynamic visualization engine...
-              </div>
-            }
-          >
-            {/* Fallback layout for exactly 1 daily active data bucket */}
-            {data.daily.length === 1 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 select-none">
-                <div className="ledger-card border-ledger-border bg-white flex flex-col justify-between p-4 min-h-[300px]">
-                  <div>
-                    <h3 className="text-xs font-bold text-ledger-ink uppercase tracking-wider">
-                      Daily Trend (Single active day)
-                    </h3>
-                    <p className="text-[10px] text-ledger-muted">A trend chart needs at least two days with payments.</p>
-                  </div>
-                  <div className="flex-1 flex flex-col justify-center space-y-4 max-w-sm mx-auto text-xs">
-                    <div className="space-y-1">
-                      <div className="flex justify-between font-semibold">
-                        <span>Cash</span>
-                        <span className="font-mono">{formatInr(data.daily[0]?.cashPaise || 0)}</span>
-                      </div>
-                      <div className="flex justify-between font-semibold">
-                        <span>Digital</span>
-                        <span className="font-mono">{formatInr(data.daily[0]?.nonCashPaise || 0)}</span>
-                      </div>
-                    </div>
-                    {/* Visual segment progress */}
-                    <div className="w-full h-3 rounded-full overflow-hidden flex bg-ledger-border">
-                      <div
-                        style={{
-                          width: `${
-                            ((data.daily[0]?.cashPaise || 0) /
-                              ((data.daily[0]?.cashPaise || 0) + (data.daily[0]?.nonCashPaise || 0) || 1)) *
-                            100
-                          }%`
-                        }}
-                        className="bg-amber-100 h-full"
-                      />
-                      <div
-                        style={{
-                          width: `${
-                            ((data.daily[0]?.nonCashPaise || 0) /
-                              ((data.daily[0]?.cashPaise || 0) + (data.daily[0]?.nonCashPaise || 0) || 1)) *
-                            100
-                          }%`
-                        }}
-                        className="bg-ledger-blue h-full"
-                      />
-                    </div>
-                    <span className="text-[10px] text-ledger-muted text-center block">
-                      {data.daily[0]?.label} · {formatInr((data.daily[0]?.cashPaise || 0) + (data.daily[0]?.nonCashPaise || 0))} total
-                    </span>
-                  </div>
-                </div>
-
-                <div className="ledger-card border-ledger-border bg-white flex flex-col justify-between p-4 min-h-[300px]">
-                  <div>
-                    <h3 className="text-xs font-bold text-ledger-ink uppercase tracking-wider">
-                      Category Breakdown
-                    </h3>
-                    <p className="text-[10px] text-ledger-muted font-medium">Spending distribution shares</p>
-                  </div>
-                  <div className="flex-1 flex items-center justify-center text-xs text-ledger-muted italic">
-                    Loading category chart share...
-                  </div>
-                </div>
-              </div>
+          <div className="space-y-3 select-none">
+            {!data?.unusual || data.unusual.length === 0 ? (
+              <p className="text-xs text-stone-500 font-medium">No unusual payment anomalies detected in this period.</p>
             ) : (
-              <ReportCharts daily={data.daily} categories={data.categories} />
+              data.unusual.map((item) => (
+                <div
+                  key={item.id}
+                  onClick={() => setSelectedTx(item)}
+                  className="p-3 bg-stone-50/50 border border-stone-100 rounded-lg flex items-center justify-between cursor-pointer hover:bg-stone-100/40 transition-colors duration-150"
+                >
+                  <div>
+                    <span className="font-bold text-xs text-stone-900 block leading-tight">{item.payeeName}</span>
+                    <span className="text-[10px] text-stone-400 font-semibold block mt-0.5">{item.transactionDate}</span>
+                  </div>
+                  <span className="tabular-nums font-black text-rose-600 text-sm">
+                    {formatInr(item.amountPaise)}
+                  </span>
+                </div>
+              ))
             )}
-          </React.Suspense>
+          </div>
+        </div>
 
-          {/* Category performance table */}
-          <section className="ledger-card p-0 overflow-hidden border-ledger-border bg-white shadow-sm">
-            <header className="px-5 py-4 border-b border-ledger-border bg-ledger-workspace/30">
-              <h2 className="text-xs font-bold text-ledger-ink uppercase tracking-wider">
-                Category performance
-              </h2>
-              <p className="text-[10px] text-ledger-muted mt-0.5 font-medium">
-                Totals, averages, and active usages
-              </p>
-            </header>
+        {/* Repeated Amounts Card */}
+        <div className="bg-white p-6 rounded-xl shadow-[0_1px_2px_rgba(0,0,0,0.04),0_1px_8px_rgba(0,0,0,0.03)] border border-stone-100/50 space-y-5">
+          <div className="flex items-center gap-3">
+            <span className="w-8 h-8 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+              <Sparkles size={16} />
+            </span>
+            <h3 className="text-xs font-bold uppercase tracking-wider text-stone-900">Repeated Amount Patterns</h3>
+          </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse text-xs">
-                <thead>
-                  <tr className="border-b border-ledger-border bg-ledger-workspace/10 text-ledger-muted font-semibold">
-                    <th className="py-2.5 px-4 font-semibold w-[35%]">Category</th>
-                    <th className="py-2.5 px-4 font-semibold text-right w-[15%]">Total</th>
-                    <th className="py-2.5 px-4 font-semibold text-right w-[12%]">Payments</th>
-                    <th className="py-2.5 px-4 font-semibold text-right w-[15%]">Avg payment</th>
-                    <th className="py-2.5 px-4 font-semibold text-right w-[15%]">Avg active day</th>
-                    <th className="py-2.5 px-4 font-semibold text-right w-[8%]">Share</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-ledger-border/40">
-                  {data.categories.map((row, idx) => (
-                    <tr key={row.label} className="hover:bg-ledger-selection/20 transition-colors">
-                      <td className="py-3.5 px-4">
-                        <strong className="text-ledger-ink font-semibold">{row.label}</strong>
-                        {/* Colored tiny horizontal visual reference bar */}
-                        <div className="w-full bg-ledger-workspace h-1 rounded-full overflow-hidden mt-1.5">
-                          <div
-                            style={{
-                              width: `${data.totals.totalPaise ? (row.totalPaise / data.totals.totalPaise) * 100 : 0}%`,
-                              backgroundColor: categoryColors[idx % categoryColors.length]
-                            }}
-                            className="h-full rounded-full"
-                          />
-                        </div>
-                      </td>
-                      <td className="py-3.5 px-4 text-right font-mono font-semibold text-ledger-ink tabular-nums">
-                        {formatInr(row.totalPaise)}
-                      </td>
-                      <td className="py-3.5 px-4 text-right font-mono font-medium text-ledger-muted tabular-nums">
-                        {row.paymentCount}
-                      </td>
-                      <td className="py-3.5 px-4 text-right font-mono font-medium text-ledger-muted tabular-nums">
-                        {formatInr(row.averageTransactionPaise ?? 0)}
-                      </td>
-                      <td className="py-3.5 px-4 text-right font-mono font-medium text-ledger-muted tabular-nums">
-                        {formatInr(row.averageActiveDayPaise ?? 0)}
-                      </td>
-                      <td className="py-3.5 px-4 text-right font-mono font-semibold text-ledger-ink tabular-nums">
-                        {data.totals.totalPaise
-                          ? ((row.totalPaise / data.totals.totalPaise) * 100).toFixed(1)
-                          : 0}
-                        %
-                      </td>
-                    </tr>
-                  ))}
-                  {data.categories.length === 0 && (
-                    <tr>
-                      <td colSpan={6} className="py-12 px-6 text-center text-ledger-muted italic">
-                        No category data in this period.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </section>
-
-          {/* Methods and top payees */}
-          <section className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <article className="ledger-card p-0 overflow-hidden border-ledger-border bg-white shadow-sm">
-              <header className="px-5 py-4 border-b border-ledger-border bg-ledger-workspace/30">
-                <h2 className="text-xs font-bold text-ledger-ink uppercase tracking-wider">
-                  Payment Methods
-                </h2>
-                <p className="text-[10px] text-ledger-muted mt-0.5 font-medium">Volume and average payment size</p>
-              </header>
-              <div className="divide-y divide-ledger-border/40">
-                {data.methods.map((row) => (
-                  <div key={row.label} className="p-4 flex justify-between items-center gap-4">
-                    <div>
-                      <strong className="text-sm font-semibold text-ledger-ink leading-tight block">
-                        {row.label}
-                      </strong>
-                      <span className="text-[10px] text-ledger-muted mt-0.5 block font-medium">
-                        {row.paymentCount} payments · avg {formatInr(row.averageTransactionPaise ?? 0)}
-                      </span>
-                    </div>
-                    <strong className="font-mono text-xs font-bold text-ledger-ink tabular-nums">
-                      {formatInr(row.totalPaise)}
-                    </strong>
+          <div className="space-y-3 select-none">
+            {!data?.repeated || data.repeated.length === 0 ? (
+              <p className="text-xs text-stone-500 font-medium">No repeated payment patterns detected.</p>
+            ) : (
+              data.repeated.slice(0, 4).map((item, idx) => (
+                <div key={idx} className="p-3 bg-stone-50/50 border border-stone-100 rounded-lg flex items-center justify-between">
+                  <div>
+                    <span className="font-bold text-xs text-stone-900 block leading-tight">{item.payeeName}</span>
+                    <span className="text-[10px] text-stone-450 font-semibold block mt-0.5">Repeated {item.occurrences} times</span>
                   </div>
-                ))}
-              </div>
-            </article>
+                  <span className="tabular-nums font-bold text-stone-950 text-sm">
+                    {formatInr(item.amountPaise)}
+                  </span>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </section>
 
-            <article className="ledger-card p-0 overflow-hidden border-ledger-border bg-white shadow-sm">
-              <header className="px-5 py-4 border-b border-ledger-border bg-ledger-workspace/30">
-                <h2 className="text-xs font-bold text-ledger-ink uppercase tracking-wider">
-                  Top Payees
-                </h2>
-                <p className="text-[10px] text-ledger-muted mt-0.5 font-medium">Highest total outgoings in range</p>
-              </header>
-              <div className="divide-y divide-ledger-border/40">
-                {data.payees.slice(0, 8).map((row) => (
-                  <div key={row.label} className="p-4 flex justify-between items-center gap-4">
-                    <div>
-                      <strong className="text-sm font-semibold text-ledger-ink leading-tight block">
-                        {row.label}
-                      </strong>
-                      <span className="text-[10px] text-ledger-muted mt-0.5 block font-medium uppercase">
-                        {row.paymentCount} payments · {row.type}
-                      </span>
-                    </div>
-                    <strong className="font-mono text-xs font-bold text-ledger-ink tabular-nums">
-                      {formatInr(row.totalPaise)}
-                    </strong>
-                  </div>
-                ))}
-              </div>
-            </article>
-          </section>
-
-          {/* Three lists (actionable/repetition) */}
-          <section className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* Largest payments */}
-            <article className="ledger-card p-0 overflow-hidden border-ledger-border bg-white shadow-sm">
-              <header className="px-5 py-4 border-b border-ledger-border bg-ledger-workspace/30">
-                <h2 className="text-xs font-bold text-ledger-ink uppercase tracking-wider">
-                  Largest Payments
-                </h2>
-                <p className="text-[10px] text-ledger-muted mt-0.5 font-medium">Click to inspect notes and history</p>
-              </header>
-              <div className="divide-y divide-ledger-border/40">
-                {data.largest.slice(0, 10).map((row) => (
-                  <button
-                    key={row.id}
-                    onClick={() => setSelectedTxId(row.id)}
-                    className="w-full text-left p-3.5 flex justify-between items-center gap-4 hover:bg-ledger-selection/20 transition-colors"
-                  >
-                    <div className="overflow-hidden">
-                      <strong className="text-xs font-semibold text-ledger-ink leading-tight block truncate">
-                        {row.payeeName}
-                      </strong>
-                      <span className="text-[10px] text-ledger-muted mt-0.5 block truncate">
-                        {row.transactionDate} · {row.note || 'No note'}
-                      </span>
-                    </div>
-                    <b className="font-mono text-xs font-bold text-ledger-ink shrink-0 tabular-nums">
-                      {formatInr(row.amountPaise)}
-                    </b>
-                  </button>
-                ))}
-              </div>
-            </article>
-
-            {/* Repeated amounts */}
-            <article className="ledger-card p-0 overflow-hidden border-ledger-border bg-white shadow-sm">
-              <header className="px-5 py-4 border-b border-ledger-border bg-ledger-workspace/30">
-                <h2 className="text-xs font-bold text-ledger-ink uppercase tracking-wider">
-                  Repeated Amounts
-                </h2>
-                <p className="text-[10px] text-ledger-muted mt-0.5 font-medium">Identical payee and transaction value</p>
-              </header>
-              <div className="divide-y divide-ledger-border/40">
-                {data.repeated.slice(0, 10).map((row, idx) => (
-                  <div key={idx} className="p-3.5 flex justify-between items-center gap-4">
-                    <div>
-                      <strong className="text-xs font-semibold text-ledger-ink leading-tight block">
-                        {row.payeeName}
-                      </strong>
-                      <span className="text-[10px] text-ledger-muted mt-0.5 block font-medium">
-                        {row.occurrences} occurrences
-                      </span>
-                    </div>
-                    <b className="font-mono text-xs font-bold text-ledger-ink shrink-0 tabular-nums">
-                      {formatInr(row.amountPaise)}
-                    </b>
-                  </div>
-                ))}
-              </div>
-            </article>
-
-            {/* Unusually high */}
-            <article className="ledger-card p-0 overflow-hidden border-ledger-border bg-white shadow-sm">
-              <header className="px-5 py-4 border-b border-ledger-border bg-ledger-workspace/30">
-                <h2 className="text-xs font-bold text-ledger-ink uppercase tracking-wider">
-                  Unusually High
-                </h2>
-                <p className="text-[10px] text-ledger-muted mt-0.5 font-medium">At least twice payee's typical average</p>
-              </header>
-              <div className="divide-y divide-ledger-border/40">
-                {data.unusual.slice(0, 10).map((row) => (
-                  <button
-                    key={row.id}
-                    onClick={() => setSelectedTxId(row.id)}
-                    className="w-full text-left p-3.5 flex justify-between items-center gap-4 hover:bg-ledger-selection/20 transition-colors"
-                  >
-                    <div className="overflow-hidden">
-                      <strong className="text-xs font-semibold text-ledger-ink leading-tight block truncate">
-                        {row.payeeName}
-                      </strong>
-                      <span className="text-[10px] text-ledger-muted mt-0.5 block truncate">
-                        {row.transactionDate} · usual avg {formatInr(row.averagePaise ?? 0)}
-                      </span>
-                    </div>
-                    <b className="font-mono text-xs font-bold text-ledger-ink shrink-0 tabular-nums">
-                      {formatInr(row.amountPaise)}
-                    </b>
-                  </button>
-                ))}
-              </div>
-            </article>
-          </section>
-
-          {/* manual backup section */}
-          <section className="ledger-card border-ledger-border bg-white flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-6">
-            <div>
-              <p className="text-[10px] uppercase font-bold text-ledger-muted tracking-wider">
-                Reliability
-              </p>
-              <h2 className="text-sm font-bold text-ledger-ink uppercase tracking-wider mt-1">
-                Verified manual backup
-              </h2>
-              <p className="text-xs text-ledger-muted mt-1 leading-normal">
-                Create an online SQLite database backup snapshot on the local disk without stopping the application.
-              </p>
-              {backupMessage && (
-                <strong className="block text-xs text-emerald-700 mt-2 font-semibold">
-                  {backupMessage}
-                </strong>
-              )}
-            </div>
-            <button onClick={handleBackup} className="btn btn-primary text-xs py-2 px-5 shrink-0 hover:shadow-sm">
-              Create verified backup
-            </button>
-          </section>
-        </>
+      {/* Transaction drawer details modal */}
+      {selectedTx && (
+        <TransactionDrawer
+          transaction={selectedTx}
+          onClose={() => setSelectedTx(null)}
+        />
       )}
-
-      {/* Transaction Inspection Drawer */}
-      <TransactionDetailDrawer
-        open={selectedTxId !== null}
-        onClose={() => setSelectedTxId(null)}
-        transactionId={selectedTxId}
-      />
     </div>
   );
 }

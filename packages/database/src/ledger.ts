@@ -426,22 +426,38 @@ export class LedgerService {
       throw new TypeError('Enter a payment command');
     }
     const master = this.getMasterData();
+    const recentDefaults = this.sqlite.prepare(
+      `SELECT category_id, payment_method_id
+       FROM transactions
+       WHERE payee_id = ? AND status = 'posted'
+       ORDER BY transaction_date DESC, transaction_time DESC, id DESC
+       LIMIT 1`
+    );
     const preview = parseQuickEntry(command, {
-      payees: master.payees.map((payee) => ({
-        id: payee.id,
-        name: payee.name,
-        normalizedNames: [
-          normalizeLookupText(payee.name),
-          ...payee.aliases.map(normalizeLookupText)
-        ],
-        defaultCategoryId: payee.defaultCategoryId,
-        defaultPaymentMethodId: payee.defaultPaymentMethodId
-      })),
+      payees: master.payees.map((payee) => {
+        const recent = recentDefaults.get(payee.id) as
+          | { category_id: number | null; payment_method_id: number | null }
+          | undefined;
+        return {
+          id: payee.id,
+          name: payee.name,
+          normalizedNames: [
+            normalizeLookupText(payee.name),
+            ...payee.aliases.map(normalizeLookupText)
+          ],
+          defaultCategoryId: payee.defaultCategoryId ?? recent?.category_id ?? null,
+          defaultPaymentMethodId:
+            payee.defaultPaymentMethodId ?? recent?.payment_method_id ?? null
+        };
+      }),
       categories: master.categories.map((category) => ({
         id: category.id,
         name: category.name,
         normalizedNames: [
           normalizeLookupText(category.name),
+          ...(normalizeLookupText(category.name).endsWith('s')
+            ? [normalizeLookupText(category.name).slice(0, -1)]
+            : []),
           ...category.aliases.map(normalizeLookupText)
         ]
       })),

@@ -77,3 +77,52 @@ describe('new payee quick entry', () => {
     });
   });
 });
+
+describe('known payee defaults', () => {
+  it('uses the payee category and method when they are not written explicitly', () => {
+    const preview = parseQuickEntry('vijay patel 2500', {
+      payees: [{
+        id: 2,
+        name: 'Vijay Patel',
+        normalizedNames: ['vijay patel'],
+        defaultCategoryId: 8,
+        defaultPaymentMethodId: 3
+      }],
+      categories: [{ id: 8, name: 'Subcontractors', normalizedNames: ['subcontractors'] }],
+      paymentMethods: [
+        { id: 1, code: 'cash', displayName: 'Cash', aliases: ['cash'] },
+        { id: 3, code: 'upi', displayName: 'UPI', aliases: ['upi'] }
+      ]
+    });
+    expect(preview).toMatchObject({
+      valid: true,
+      categoryId: 8,
+      paymentMethodId: 3,
+      needsReview: false
+    });
+  });
+
+  it('allows an explicit category word to override the payee default', () => {
+    const preview = parseQuickEntry('suresh yadav 3l material', {
+      payees: [{
+        id: 4,
+        name: 'Suresh Yadav',
+        normalizedNames: ['suresh yadav'],
+        defaultCategoryId: 1,
+        defaultPaymentMethodId: 1
+      }],
+      categories: [
+        { id: 1, name: 'Wages', normalizedNames: ['wages', 'wage'] },
+        { id: 2, name: 'Materials', normalizedNames: ['materials', 'material'] }
+      ],
+      paymentMethods: [{ id: 1, code: 'cash', displayName: 'Cash', aliases: ['cash'] }]
+    });
+    expect(preview).toMatchObject({
+      valid: true,
+      amountPaise: 30_000_000,
+      categoryId: 2,
+      categoryName: 'Materials',
+      needsReview: false
+    });
+  });
+});

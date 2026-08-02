@@ -177,7 +177,8 @@ export function parseQuickEntry(command: string, context: QuickEntryContext): Qu
   if (explicitMethod) remaining = removePhrase(remaining, explicitMethod.alias);
   const cashMethod = context.paymentMethods.find((method) => method.code === 'cash');
   // Cash is the desk-wide default. A different method must be written explicitly.
-  const paymentMethodId = explicitMethod?.method.id ?? cashMethod?.id ?? null;
+  const paymentMethodId =
+    explicitMethod?.method.id ?? payee?.defaultPaymentMethodId ?? cashMethod?.id ?? null;
   const paymentMethod = context.paymentMethods.find((method) => method.id === paymentMethodId);
 
   const categoryMatches = context.categories

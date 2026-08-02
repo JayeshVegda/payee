@@ -1,6 +1,6 @@
 import { openDatabase } from '../packages/database/dist/index.js';
 
-const runtime = openDatabase({ migrate: false });
+const runtime = openDatabase({ migrate: true });
 const db = runtime.sqlite;
 const marker = 'demo_seed_2026_h1';
 
@@ -102,6 +102,27 @@ const payees: DemoPayee[] = [
     maximumRupees: 1800
   },
   {
+    name: 'Vijay Patel',
+    type: 'person',
+    category: 'Subcontractors',
+    method: 'upi',
+    favourite: true,
+    aliases: ['vijaybhai', 'vijay p'],
+    notes: ['fabrication contract', 'site advance', 'labour settlement'],
+    minimumRupees: 1500,
+    maximumRupees: 18000
+  },
+  {
+    name: 'Vinay Shah',
+    type: 'person',
+    category: 'Office & Admin',
+    method: 'upi',
+    aliases: ['vinay', 'v shah'],
+    notes: ['office purchase', 'reimbursement', 'printing expense'],
+    minimumRupees: 300,
+    maximumRupees: 6500
+  },
+  {
     name: 'Lakshmi Electricals',
     type: 'company',
     category: 'Materials',
@@ -159,9 +180,7 @@ function timestamp(date: string, time: string): string {
 }
 
 try {
-  const existingSeed = db.prepare('SELECT value FROM app_settings WHERE key = ?').get(marker);
-  if (existingSeed)
-    throw new Error('This demo dataset has already been added. No records were changed.');
+  // Allow seeding always for demo data generation
 
   const categoryRows = db.prepare('SELECT id, name FROM categories').all() as Array<{
     id: number;
@@ -210,13 +229,14 @@ try {
     let reviewCount = 0;
     let totalPaise = 0;
     const start = new Date('2026-02-01T00:00:00Z');
-    const end = new Date('2026-08-01T00:00:00Z');
+    const end = new Date('2026-08-02T00:00:00Z');
 
     for (let day = new Date(start); day <= end; day.setUTCDate(day.getUTCDate() + 1)) {
       const date = isoDate(day);
       const weekday = day.getUTCDay();
-      const baseCount = weekday === 0 ? 0 : weekday === 6 ? 2 : 3;
-      const count = baseCount + Math.floor(random() * 4);
+      const isToday = date === '2026-08-02';
+      const baseCount = isToday ? 5 : weekday === 0 ? 0 : weekday === 6 ? 2 : 3;
+      const count = isToday ? 5 : baseCount + Math.floor(random() * 4);
       for (let index = 0; index < count; index += 1) {
         const payee = pick(payees);
         const wholeRupees =

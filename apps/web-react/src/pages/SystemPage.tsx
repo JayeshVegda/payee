@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api, post } from '../api/client';
-import { ShieldCheck, Database, HardDrive, CheckCircle2, RefreshCw } from 'lucide-react';
+import { ShieldCheck, Database, HardDrive, RefreshCw, AlertTriangle, CheckCircle2, DownloadCloud } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface Status {
@@ -19,6 +19,8 @@ interface Status {
 }
 
 export default function SystemPage() {
+  const [backingUp, setBackingUp] = useState(false);
+
   const { data: status, isLoading, refetch, isError } = useQuery<Status>({
     queryKey: ['system-status'],
     queryFn: () => api<Status>('/system/status')
@@ -30,153 +32,168 @@ export default function SystemPage() {
   };
 
   const handleBackup = async () => {
+    setBackingUp(true);
     try {
       const result = await post<{ filename: string }>('/system/backup', {});
-      toast.success('Backup verified', { description: result.filename });
+      toast.success('Backup created and verified!', { description: result.filename });
       await refetch();
     } catch (caught) {
       toast.error(caught instanceof Error ? caught.message : 'Backup failed');
+    } finally {
+      setBackingUp(false);
     }
   };
 
   const formatSize = (bytes: number) => `${(bytes / 1024 / 1024).toFixed(2)} MB`;
 
+  // Status Banner Logic (Section 4.6 Spec)
+  const isHealthy = status?.integrity === 'ok';
+  const isBackupOverdue = status?.lastBackup
+    ? (new Date().getTime() - new Date(status.lastBackup.modifiedAt).getTime()) > 7 * 24 * 3600 * 1000
+    : true;
+
   return (
     <div className="space-y-6">
       {/* Header */}
-      <header className="flex items-center justify-between">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-bold tracking-tight text-ledger-ink font-sans">
-            System Dashboard
-          </h1>
+          <h1 className="text-2xl font-bold text-[#111827]">System</h1>
+          <p className="mt-1 text-sm text-[#667085]">Database health and backups.</p>
         </div>
-        <button
-          onClick={handleRefresh}
-          disabled={isLoading}
-          className="btn btn-secondary text-xs flex items-center gap-1.5 py-1.5 px-3 bg-white"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
-          Refresh
-        </button>
-      </header>
+
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleRefresh}
+            className="btn btn-secondary h-10 px-3 text-[#667085] hover:text-[#111827]"
+            title="Refresh system status"
+          >
+            <RefreshCw size={16} className={isLoading ? 'animate-spin' : ''} />
+          </button>
+
+          <button
+            onClick={handleBackup}
+            disabled={backingUp}
+            className="btn btn-primary h-10 px-4 gap-2 shadow-xs"
+          >
+            <DownloadCloud size={16} className={backingUp ? 'animate-spin' : ''} />
+            <span>{backingUp ? 'Backing up...' : 'Back Up Now'}</span>
+          </button>
+        </div>
+      </div>
 
       {isError && (
-        <div className="p-3 text-xs bg-ledger-review/10 border border-ledger-review/20 text-ledger-review rounded-md">
-          Failed to fetch system status. Is apps/server running?
+        <div className="p-4 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-sm font-semibold flex items-center gap-2">
+          <AlertTriangle size={18} />
+          <span>Failed to fetch system status. Please verify the Node server is running.</span>
         </div>
       )}
 
       {status && (
         <>
-          {/* Health Banner */}
-          <section className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl flex items-center gap-3">
-            <ShieldCheck className="w-6 h-6 text-emerald-600 shrink-0" />
-            <div className="text-xs">
-              <strong className="block text-sm font-bold text-emerald-900 leading-tight">
-                {status.integrity === 'ok' ? 'Database Healthy' : 'Database Needs Attention'}
-              </strong>
-              <span className="block text-emerald-700 font-medium mt-0.5">
-                SQLite {status.journalMode.toUpperCase()} · Foreign keys{' '}
-                {status.foreignKeys ? 'enabled' : 'disabled'} · Last activity:{' '}
-                {status.lastActivity
-                  ? new Date(status.lastActivity).toLocaleString('en-IN', { hour12: true })
-                  : 'none'}
-              </span>
+          {/* Reusable Status Banner Component (Section 4.6 Spec) */}
+          <div
+            className={`p-5 rounded-2xl border flex items-center justify-between gap-4 ${
+              !isHealthy
+                ? 'bg-rose-50 border-rose-200 text-rose-900'
+                : isBackupOverdue
+                ? 'bg-amber-50 border-amber-200 text-amber-900'
+                : 'bg-emerald-50 border-emerald-200 text-emerald-900'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              {!isHealthy ? (
+                <AlertTriangle size={24} className="text-rose-600 shrink-0" />
+              ) : isBackupOverdue ? (
+                <AlertTriangle size={24} className="text-amber-600 shrink-0" />
+              ) : (
+                <ShieldCheck size={24} className="text-[#00B96B] shrink-0" />
+              )}
+              <div>
+                <h3 className="font-extrabold text-base">
+                  {!isHealthy
+                    ? 'Database Error / Issue Detected'
+                    : isBackupOverdue
+                    ? 'Database Healthy (Backup Recommended)'
+                    : 'System Fully Operational & Healthy'}
+                </h3>
+                <p className="text-xs mt-0.5 opacity-80">
+                  SQLite {status.journalMode.toUpperCase()} · Foreign keys{' '}
+                  {status.foreignKeys ? 'enabled' : 'disabled'} · Last activity:{' '}
+                  {status.lastActivity
+                    ? new Date(status.lastActivity).toLocaleString('en-IN')
+                    : 'none'}
+                </p>
+              </div>
             </div>
-          </section>
+          </div>
 
-          {/* Stats Cards */}
-          <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <article className="ledger-card p-5 border-ledger-border shadow-xs bg-white flex flex-col justify-between min-h-[100px]">
-              <div className="flex items-center gap-2 text-ledger-blue">
-                <Database className="w-4 h-4 shrink-0" />
-                <span className="text-xs font-semibold text-ledger-muted uppercase tracking-wider">
+          {/* System Metrics Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+            <div className="ledger-card bg-white p-6 border border-[#DDE3EC] rounded-2xl shadow-xs">
+              <div className="flex items-center justify-between text-[#165DFF] mb-2">
+                <Database size={20} />
+                <span className="text-xs font-bold uppercase tracking-wider text-[#667085]">
                   Database Size
                 </span>
               </div>
-              <strong className="text-xl font-mono font-bold text-ledger-ink tracking-tight mt-2 block tabular-nums">
+              <span className="text-2xl font-black text-[#111827] tabular-nums block">
                 {formatSize(status.databaseSizeBytes)}
-              </strong>
-              <span className="text-[10px] text-ledger-muted block truncate mt-1" title={status.databasePath}>
-                Path: {status.databasePath}
               </span>
-            </article>
-
-            <article className="ledger-card p-5 border-ledger-border shadow-xs bg-white flex flex-col justify-between min-h-[100px]">
-              <div className="flex items-center gap-2 text-ledger-blue">
-                <HardDrive className="w-4 h-4 shrink-0" />
-                <span className="text-xs font-semibold text-ledger-muted uppercase tracking-wider">
-                  Verified Backups
-                </span>
-              </div>
-              <strong className="text-xl font-mono font-bold text-ledger-ink tracking-tight mt-2 block tabular-nums">
-                {status.backupCount}
-              </strong>
-              <span className="text-[10px] text-ledger-muted block truncate mt-1">
-                Size: {formatSize(status.backupsSizeBytes)} total
+              <span className="text-xs text-[#667085] truncate block mt-2" title={status.databasePath}>
+                {status.databasePath}
               </span>
-            </article>
-
-            <article className="ledger-card p-5 border-ledger-border shadow-xs bg-white flex flex-col justify-between min-h-[100px]">
-              <div className="flex items-center gap-2 text-ledger-blue">
-                <CheckCircle2 className="w-4 h-4 shrink-0" />
-                <span className="text-xs font-semibold text-ledger-muted uppercase tracking-wider">
-                  Last Backup
-                </span>
-              </div>
-              <strong className="text-xl font-mono font-bold text-ledger-ink tracking-tight mt-2 block">
-                {status.lastBackup
-                  ? new Date(status.lastBackup.modifiedAt).toLocaleDateString('en-IN')
-                  : 'None'}
-              </strong>
-              <span className="text-[10px] text-ledger-muted block truncate mt-1" title={status.lastBackup?.name ?? ''}>
-                {status.lastBackup?.name ?? 'Create the first backup now'}
-              </span>
-            </article>
-          </section>
-
-          {/* Counts metrics */}
-          <section className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <article className="ledger-card py-3 px-4 border-ledger-border bg-white text-center">
-              <span className="text-[10px] uppercase font-bold text-ledger-muted block">Posted</span>
-              <strong className="text-xl font-mono font-bold text-ledger-ink block mt-1 tabular-nums">
-                {status.counts.posted}
-              </strong>
-            </article>
-            <article className="ledger-card py-3 px-4 border-ledger-border bg-white text-center">
-              <span className="text-[10px] uppercase font-bold text-ledger-muted block">Review</span>
-              <strong className="text-xl font-mono font-bold text-ledger-ink block mt-1 tabular-nums">
-                {status.counts.review}
-              </strong>
-            </article>
-            <article className="ledger-card py-3 px-4 border-ledger-border bg-white text-center">
-              <span className="text-[10px] uppercase font-bold text-ledger-muted block">Voided</span>
-              <strong className="text-xl font-mono font-bold text-ledger-ink block mt-1 tabular-nums">
-                {status.counts.voided}
-              </strong>
-            </article>
-            <article className="ledger-card py-3 px-4 border-ledger-border bg-white text-center">
-              <span className="text-[10px] uppercase font-bold text-ledger-muted block">Active Payees</span>
-              <strong className="text-xl font-mono font-bold text-ledger-ink block mt-1 tabular-nums">
-                {status.payeeCount}
-              </strong>
-            </article>
-          </section>
-
-          {/* Action Panel */}
-          <section className="ledger-card border-ledger-border bg-white flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-6">
-            <div>
-              <h2 className="text-sm font-bold text-ledger-ink uppercase tracking-wider">
-                Create Verified Backup
-              </h2>
-              <p className="text-xs text-ledger-muted mt-1 leading-normal">
-                Utilizes SQLite's online incremental backup API to produce an integer-verified copy.
-              </p>
             </div>
-            <button onClick={handleBackup} className="btn btn-primary text-xs py-2 px-5 shrink-0 hover:shadow-sm">
-              Back up now
-            </button>
-          </section>
+
+            <div className="ledger-card bg-white p-6 border border-[#DDE3EC] rounded-2xl shadow-xs">
+              <div className="flex items-center justify-between text-[#00B96B] mb-2">
+                <HardDrive size={20} />
+                <span className="text-xs font-bold uppercase tracking-wider text-[#667085]">
+                  Backups Storage
+                </span>
+              </div>
+              <span className="text-2xl font-black text-[#111827] tabular-nums block">
+                {formatSize(status.backupsSizeBytes)}
+              </span>
+              <span className="text-xs text-[#667085] block mt-2">
+                {status.backupCount} verified B2/local backups
+              </span>
+            </div>
+
+            <div className="ledger-card bg-white p-6 border border-[#DDE3EC] rounded-2xl shadow-xs">
+              <div className="flex items-center justify-between text-[#F79009] mb-2">
+                <CheckCircle2 size={20} />
+                <span className="text-xs font-bold uppercase tracking-wider text-[#667085]">
+                  Total Records
+                </span>
+              </div>
+              <span className="text-2xl font-black text-[#111827] tabular-nums block">
+                {status.counts.total}
+              </span>
+              <span className="text-xs text-[#667085] block mt-2">
+                {status.payeeCount} registered payees
+              </span>
+            </div>
+          </div>
+
+          {/* Last Backup Details */}
+          {status.lastBackup && (
+            <div className="ledger-card bg-white p-6 border border-[#DDE3EC] rounded-2xl shadow-xs space-y-3">
+              <h3 className="font-bold text-base text-[#111827]">Most Recent Verified Backup</h3>
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
+                <div>
+                  <span className="font-mono font-bold text-slate-800 block text-sm">
+                    {status.lastBackup.name}
+                  </span>
+                  <span className="text-[#667085]">
+                    Created {new Date(status.lastBackup.modifiedAt).toLocaleString('en-IN')}
+                  </span>
+                </div>
+                <span className="px-3 py-1 bg-emerald-100 text-emerald-800 font-bold rounded-full">
+                  {formatSize(status.lastBackup.sizeBytes)}
+                </span>
+              </div>
+            </div>
+          )}
         </>
       )}
     </div>

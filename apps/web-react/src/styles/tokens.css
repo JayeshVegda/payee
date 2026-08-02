@@ -1,44 +1,51 @@
-@font-face {
-  font-family: 'Geist Sans';
-  src: url('/fonts/Geist-Variable.woff2') format('woff2-variations');
-  font-weight: 100 900;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'Geist Mono';
-  src: url('/fonts/GeistMono-Variable.woff2') format('woff2-variations');
-  font-weight: 100 900;
-  font-style: normal;
-  font-display: swap;
-}
-
 :root {
-  /* Ledger OS specific palette variables - Notion / Apple warm gray scale */
-  --ledger-ink: #1c1917;
-  --ledger-blue: #2563eb;
-  --ledger-blue-hover: #1d4ed8;
-  --ledger-selection: #f5f5f4;
-  --ledger-workspace: #fafaf9;
-  --ledger-surface: #ffffff;
-  --ledger-border: #f5f5f4;
-  --ledger-muted: #78716c;
-  --ledger-review: #dc2626;
+  /* Design Tokens from Redesign Specification */
+  /* Colors */
+  --bg-page: #FAFAFA;
+  --bg-card: #FFFFFF;
+  --bg-selected: #E9F1FF;
+  --border-default: #E5E7EB;
+  --text-primary: #111827;
+  --text-secondary: #4B5563;
+  --brand-blue: #2563EB;
+  --brand-blue-hover: #1D4ED8;
+  --success-green: #00B96B;
+  --danger-red: #FF2638;
+  --warning-amber: #F79009;
 
-  /* Motion scales */
-  --motion-fast: 150ms;
-  --motion-base: 200ms;
-  --motion-slow: 300ms;
-  --motion-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  /* Legacy aliases for backward compatibility */
+  --ledger-ink: var(--text-primary);
+  --ledger-blue: var(--brand-blue);
+  --ledger-blue-hover: var(--brand-blue-hover);
+  --ledger-selection: var(--bg-selected);
+  --ledger-workspace: var(--bg-page);
+  --ledger-surface: var(--bg-card);
+  --ledger-border: var(--border-default);
+  --ledger-muted: var(--text-secondary);
+  --ledger-review: var(--warning-amber);
 
-  /* Radius scale */
+  /* Radius */
   --radius-small: 8px;
-  --radius-base: 10px;
+  --radius-base: 8px;
+  --radius-button: 8px;
+  --radius-input: 8px;
+  --radius-card: 12px;
   --radius-container: 12px;
   --radius-large: 16px;
+  --radius-drawer: 16px;
+  --radius-pill: 999px;
 
-  /* Layout and sizing */
+  /* Shadow */
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.04), 0 1px 8px rgba(0, 0, 0, 0.03);
+  --shadow-drawer: 0 8px 24px rgba(0, 0, 0, 0.12);
+  --shadow-segmented: 0 1px 3px rgba(0, 0, 0, 0.1);
+
+  /* Motion */
+  --motion-fast: 150ms;
+  --motion-base: 200ms;
+  --motion-ease: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* Layout */
   --base-font-size: 15px;
   --base-line-height: 1.5;
 }

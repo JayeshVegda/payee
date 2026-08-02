@@ -50,6 +50,25 @@ describe('server app', () => {
     expect(originResponse.status).toBe(403);
   });
 
+  it('accepts the configured HTTPS origin', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'payment-ledger-server-test-'));
+    directories.push(directory);
+    const runtime = openDatabase({ databasePath: join(directory, 'ledger.sqlite3') });
+    runtimes.push(runtime);
+    const app = createApp({
+      runtime,
+      expectedHost: 'payee.zayu.dev',
+      expectedOrigin: 'https://payee.zayu.dev',
+      webBuildDirectory: directory,
+      logLevel: 'silent'
+    });
+    const response = await app.request('/api/missing', {
+      method: 'POST',
+      headers: { host: 'payee.zayu.dev', origin: 'https://payee.zayu.dev' }
+    });
+    expect(response.status).toBe(404);
+  });
+
   it('returns a typed API 404', async () => {
     const response = await fixture().request('/api/missing', {
       headers: { host: '127.0.0.1:4782' }

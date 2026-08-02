@@ -9,6 +9,7 @@ import { createApi } from './api.js';
 export interface AppOptions {
   runtime: DatabaseRuntime;
   expectedHost: string;
+  expectedOrigin?: string;
   webBuildDirectory?: string;
   logLevel?: string;
 }
@@ -25,16 +26,14 @@ function log(level: string, message: string, fields: Record<string, unknown> = {
 
 export function createApp(options: AppOptions): Hono {
   const app = new Hono();
-  const defaultWebBuildDirectory = existsSync(resolve('apps/web-react/build'))
-    ? 'apps/web-react/build'
-    : 'apps/web/build';
+  const defaultWebBuildDirectory = 'apps/web-react/build';
   const webBuildDirectory = resolve(options.webBuildDirectory ?? defaultWebBuildDirectory);
   const logLevel = options.logLevel ?? 'info';
 
   app.use('*', secureHeaders());
   app.use('*', async (context, next) => {
     const host = context.req.header('host');
-    if (host !== options.expectedHost) {
+    if (options.expectedHost !== '*' && host !== options.expectedHost) {
       return context.json<ErrorBody>(
         { error: { code: 'INVALID_HOST', message: 'Request host is not allowed' } },
         403
@@ -42,7 +41,8 @@ export function createApp(options: AppOptions): Hono {
     }
     if (!['GET', 'HEAD', 'OPTIONS'].includes(context.req.method)) {
       const origin = context.req.header('origin');
-      if (origin && origin !== `http://${options.expectedHost}`) {
+      const expectedOrigin = options.expectedOrigin ?? `http://${options.expectedHost}`;
+      if (options.expectedHost !== '*' && origin && origin !== expectedOrigin) {
         return context.json<ErrorBody>(
           { error: { code: 'INVALID_ORIGIN', message: 'Request origin is not allowed' } },
           403

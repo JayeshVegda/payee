@@ -1,0 +1,36 @@
+services:
+  payee:
+    image: node:24-bookworm-slim
+    container_name: payee
+    restart: unless-stopped
+    working_dir: /app
+    command: ["node", "scripts/start-production.mjs"]
+    volumes:
+      - .:/app
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PAYMENT_LEDGER_EXPECTED_HOST: payee.zayu.dev
+      PAYMENT_LEDGER_EXPECTED_ORIGIN: https://payee.zayu.dev
+      PAYMENT_LEDGER_DATA_DIR: /app
+    expose:
+      - "4782"
+    ports:
+      - "127.0.0.1:4782:4782"
+    networks:
+      - proxy-net
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('node:http').get({hostname:'127.0.0.1',port:4782,path:'/api/health',headers:{host:'payee.zayu.dev'}},r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
+
+networks:
+  proxy-net:
+    external: true

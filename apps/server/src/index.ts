@@ -10,11 +10,14 @@ const port = production ? 4782 : (requestedPort ?? 4782);
 if (!Number.isInteger(port) || port < 1 || port > 65_535) throw new Error('Invalid port');
 if (production && port !== 4782) throw new Error('Production port is fixed at 4782');
 
-const hostname = '127.0.0.1' as const;
+const hostname = process.env.HOST ?? '127.0.0.1';
 const runtime = openDatabase();
 const app = createApp({
   runtime,
-  expectedHost: `${hostname}:${port}`,
+  expectedHost: process.env.PAYMENT_LEDGER_EXPECTED_HOST ?? `${hostname}:${port}`,
+  ...(process.env.PAYMENT_LEDGER_EXPECTED_ORIGIN
+    ? { expectedOrigin: process.env.PAYMENT_LEDGER_EXPECTED_ORIGIN }
+    : {}),
   ...(process.env.PAYMENT_LEDGER_LOG_LEVEL
     ? { logLevel: process.env.PAYMENT_LEDGER_LOG_LEVEL }
     : {})

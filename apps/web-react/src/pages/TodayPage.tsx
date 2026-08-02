@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useNavigate } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   api,
@@ -14,32 +15,35 @@ import {
 } from '../api/client';
 import Fuse from 'fuse.js';
 import {
-  RefreshCw,
-  ListPlus,
-  FileText,
-  CheckCircle2,
   Search,
-  ArrowRight,
-  Banknote,
-  Clock,
-  TrendingUp,
-  Inbox,
+  CheckCircle2,
+  AlertTriangle,
   CreditCard,
-  ChevronRight,
-  HelpCircle,
+  Banknote,
+  ArrowRight,
+  Inbox,
   User,
   Tag,
-  LayoutGrid
+  RefreshCw,
+  FileText,
+  ListPlus,
+  LayoutGrid,
+  Clock,
+  ChevronRight
 } from 'lucide-react';
 import { toast } from 'sonner';
 import DetailedEntryDrawer from '../components/payment-entry/DetailedEntryDrawer';
 import BatchEntryModal from '../components/payment-entry/BatchEntryModal';
 import QuickReviewModal from '../components/review/QuickReviewModal';
-import TransactionDetailDrawer from '../components/transactions/TransactionDetailDrawer';
+import { PayeeAvatar } from '../components/common/PayeeAvatar';
+import { StatusPill } from '../components/common/StatusPill';
+import { TransactionDrawer } from '../components/common/TransactionDrawer';
 
 export default function TodayPage() {
+  const navigate = useNavigate();
   const [command, setCommand] = useState('');
   const [preview, setPreview] = useState<QuickPreview | null>(null);
+
   const [saving, setSaving] = useState(false);
   const [suggestionIndex, setSuggestionIndex] = useState(0);
   const [newPayeeConfirmed, setNewPayeeConfirmed] = useState(false);
@@ -58,6 +62,7 @@ export default function TodayPage() {
   } | null>(null);
 
   const inputRef = useRef<HTMLInputElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
   const previewTimerRef = useRef<number | undefined>(undefined);
 
   // Queries
@@ -90,13 +95,20 @@ export default function TodayPage() {
   const todaysItems = transactionsData?.items || [];
   const loading = dashboardLoading || transactionsLoading;
 
+  const { data: lastPaymentData } = useQuery<{ items: LedgerTransaction[] }>({
+    queryKey: ['payee-last-payment', preview?.payeeId],
+    queryFn: () => api<{ items: LedgerTransaction[] }>(`/transactions?payeeId=${preview!.payeeId}&pageSize=1`),
+    enabled: Boolean(preview?.payeeId)
+  });
+  const lastPayment = lastPaymentData?.items[0];
+
   const handleRefresh = async () => {
     await Promise.all([refetchDashboard(), refetchMaster(), refetchTransactions()]);
     toast.success('Today data refreshed');
   };
 
   // Suggestion list derivation with deterministic payee ranking
-  const commandPayeeSuggestions = React.useMemo(() => {
+  const commandPayeeSuggestions = useMemo(() => {
     const trimmed = command.trim();
     if (!trimmed || !master?.payees) return [];
     
@@ -192,7 +204,7 @@ export default function TodayPage() {
   }, [command, master]);
 
   // Similar payees checks for warnings when new payee is proposed
-  const similarPayees = React.useMemo(() => {
+  const similarPayees = useMemo(() => {
     if (!preview?.isNewPayee || !preview.payeeName || !master?.payees) return [];
     return new Fuse(master.payees, {
       keys: ['name', 'aliases'],
@@ -206,7 +218,7 @@ export default function TodayPage() {
   }, [preview, master]);
 
   // Frontend debounced duplicate detection (logged within last 5 minutes)
-  const isPossibleDuplicate = React.useMemo(() => {
+  const isPossibleDuplicate = useMemo(() => {
     if (!preview?.valid || todaysItems.length === 0) return false;
     const latest = todaysItems[0]!;
     
@@ -245,23 +257,26 @@ export default function TodayPage() {
   };
 
   useEffect(() => {
+    updatePreview(command);
+  }, [command]);
+
+  useEffect(() => {
     return () => {
       if (previewTimerRef.current) window.clearTimeout(previewTimerRef.current);
     };
   }, []);
 
-  const chooseCommandPayee = (payee: Payee) => {
+  const applyPayeeSuggestion = (payee: Payee) => {
     const trimmed = command.trim();
     const amountStart = trimmed.search(/\s+(?=(?:₹|rs\.?\s*)?\d)/i);
     const remainder = amountStart >= 0 ? trimmed.slice(amountStart).trim() : '';
     const newCmd = `${payee.name}${remainder ? ` ${remainder}` : ' '}`;
     setCommand(newCmd);
-    updatePreview(newCmd);
     inputRef.current?.focus();
   };
 
-  const handleCommandKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (commandPayeeSuggestions.length > 0) {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (commandPayeeSuggestions.length > 0 && suggestionIndex >= 0) {
       if (e.key === 'ArrowDown') {
         e.preventDefault();
         setSuggestionIndex((prev) => (prev + 1) % commandPayeeSuggestions.length);
@@ -278,7 +293,7 @@ export default function TodayPage() {
         const payee = commandPayeeSuggestions[suggestionIndex];
         if (payee) {
           e.preventDefault();
-          chooseCommandPayee(payee);
+          applyPayeeSuggestion(payee);
         }
         return;
       }
@@ -291,11 +306,11 @@ export default function TodayPage() {
 
     if (e.key === 'Enter') {
       e.preventDefault();
-      void saveSmart();
+      void handleSave();
     }
   };
 
-  const saveSmart = async () => {
+  const handleSave = async () => {
     if (
       !preview?.valid ||
       saving ||
@@ -341,23 +356,6 @@ export default function TodayPage() {
     }
   };
 
-  const usePayee = (pName: string) => {
-    const newCmd = `${pName} `;
-    setCommand(newCmd);
-    updatePreview(newCmd);
-    inputRef.current?.focus();
-  };
-
-  const useSimilarPayee = (pName: string) => {
-    if (!preview?.payeeName) return;
-    const newCmd = command.replace(
-      new RegExp(`^${preview.payeeName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'i'),
-      pName
-    );
-    setCommand(newCmd);
-    updatePreview(newCmd);
-  };
-
   // Operational stats calculations
   const uniquePayees = new Set(todaysItems.map((item) => item.payeeId)).size;
   const firstPaymentTime = todaysItems.length > 0 ? formatTime12(todaysItems[todaysItems.length - 1]!.transactionTime) : '—';
@@ -367,18 +365,18 @@ export default function TodayPage() {
     : 0;
 
   // Split Quick Payees list into Frequent and Recent groups
-  const frequentPayees = React.useMemo(() => {
+  const frequentPayees = useMemo(() => {
     return master?.payees?.filter((p) => p.favourite) || [];
   }, [master]);
 
-  const recentPayees = React.useMemo(() => {
+  const recentPayees = useMemo(() => {
     return master?.payees?.filter((p) => !p.favourite && p.paymentCount > 0)
       .sort((a, b) => b.paymentCount - a.paymentCount)
       .slice(0, 8) || [];
   }, [master]);
 
   // Determine whether to show the Purpose column
-  const hasAnyNotes = React.useMemo(() => todaysItems.some((item) => item.note?.trim()), [todaysItems]);
+  const hasAnyNotes = useMemo(() => todaysItems.some((item) => item.note?.trim()), [todaysItems]);
 
   // Calculate Outgoing Split Percentages
   const totalOutgoingVal = dashboard?.totalOutgoingPaise ?? 0;
@@ -389,7 +387,7 @@ export default function TodayPage() {
 
   return (
     <div className="space-y-10 max-w-7xl mx-auto mb-10">
-      {/* 1. Page Title & Action bar (Apple / Notion Minimal Title & Ghost style demoted actions) */}
+      {/* 1. Header (Apple / Notion Minimal Title & Ghost style demoted actions) */}
       <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-stone-200/40 pb-6">
         <div>
           {/* Screen reader only header to support Playwright E2E locator assertions */}
@@ -420,7 +418,7 @@ export default function TodayPage() {
           </button>
           <button
             onClick={() => setDetailedOpen(true)}
-            className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow-sm hover:shadow transition-all duration-150 cursor-pointer"
+            className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold bg-[#2563EB] hover:bg-[#1D4ED8] text-white rounded-lg shadow-sm hover:shadow transition-all duration-150 cursor-pointer border-none"
           >
             <FileText className="w-3.5 h-3.5" />
             Detailed Form
@@ -441,14 +439,13 @@ export default function TodayPage() {
             type="text"
             role="combobox"
             aria-autocomplete="list"
-            aria-expanded={commandPayeeSuggestions.length > 0}
+            aria-expanded={commandPayeeSuggestions.length > 0 && suggestionIndex >= 0}
             aria-controls="payee-listbox"
             value={command}
             onChange={(e) => {
               setCommand(e.target.value);
-              updatePreview(e.target.value);
             }}
-            onKeyDown={handleCommandKey}
+            onKeyDown={handleKeyDown}
             placeholder="Payee, amount, date, method, purpose..."
             className="flex-1 h-full px-5 text-sm font-semibold tracking-tight text-stone-800 border-none outline-none focus:ring-0 focus:outline-none"
             autoComplete="off"
@@ -503,7 +500,6 @@ export default function TodayPage() {
           </div>
         </div>
 
-        {/* Suggestions drop-down matching aliases */}
         <AnimatePresence>
           {commandPayeeSuggestions.length > 0 && suggestionIndex >= 0 && (
             <motion.div
@@ -524,14 +520,15 @@ export default function TodayPage() {
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
                 {commandPayeeSuggestions.map((payee, idx) => (
-                  <div
+                  <button
+                    type="button"
                     key={payee.id}
                     role="option"
                     aria-selected={idx === suggestionIndex}
-                    onClick={() => chooseCommandPayee(payee)}
-                    className={`flex items-center justify-between p-2.5 rounded-lg border cursor-pointer select-none transition-colors ${
+                    onClick={() => applyPayeeSuggestion(payee)}
+                    className={`flex items-center justify-between p-2.5 rounded-lg border cursor-pointer select-none transition-colors text-left ${
                       idx === suggestionIndex
-                        ? 'border-blue-500 bg-white text-stone-900 shadow-3xs'
+                        ? 'border-blue-500 bg-white text-stone-900 shadow-3xs font-semibold'
                         : 'border-stone-200/80 bg-white hover:bg-stone-50/80 text-stone-700'
                     }`}
                   >
@@ -546,7 +543,7 @@ export default function TodayPage() {
                       </div>
                     </div>
                     <ChevronRight className="w-3 h-3 text-stone-400" />
-                  </div>
+                  </button>
                 ))}
               </div>
             </motion.div>
@@ -564,7 +561,7 @@ export default function TodayPage() {
               <div className="flex items-center gap-2.5">
                 <span
                   className={`flex items-center justify-center w-5.5 h-5.5 rounded-full shrink-0 ${
-                    preview.valid ? 'text-emerald-700 bg-emerald-100' : 'text-stone-450 bg-stone-100'
+                    preview.valid ? 'text-emerald-700 bg-emerald-100' : 'text-stone-455 bg-stone-100'
                   }`}
                 >
                   {preview.valid ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Search className="w-3.5 h-3.5" />}
@@ -572,8 +569,7 @@ export default function TodayPage() {
                 <div className="text-xs">
                   <span className="text-stone-400 font-bold block uppercase tracking-wider text-[9px]">Parsed payment</span>
                   <strong className="text-stone-905 font-bold text-sm block mt-0.5">
-                    {preview.payeeName || 'Choose payee'} ·{' '}
-                    {preview.amountPaise ? formatInr(preview.amountPaise) : 'Amount missing'}
+                    {preview.payeeName || 'Choose payee'} · {preview.amountPaise ? formatInr(preview.amountPaise) : 'Amount missing'}
                   </strong>
                 </div>
               </div>
@@ -586,8 +582,7 @@ export default function TodayPage() {
                   {preview.categoryName || 'Category required'}
                 </span>
                 <span>
-                  {preview.transactionDate || todayDate || 'Today'} ·{' '}
-                  {preview.transactionTime ? formatTime12(preview.transactionTime) : 'Now'}
+                  {preview.transactionDate || todayDate || 'Today'} · {preview.transactionTime ? formatTime12(preview.transactionTime) : 'Now'}
                 </span>
                 {preview.note && (
                   <span className="truncate max-w-[200px]" title={preview.note}>
@@ -604,7 +599,13 @@ export default function TodayPage() {
                     {similarPayees.map((p) => (
                       <button
                         key={p.id}
-                        onClick={() => useSimilarPayee(p.name)}
+                        onClick={() => {
+                          const newCmd = command.replace(
+                            new RegExp(`^${preview.payeeName?.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'i'),
+                            p.name
+                          );
+                          setCommand(newCmd);
+                        }}
                         className="px-2 py-0.5 bg-white border border-amber-300 hover:border-amber-500 rounded text-[11px] text-amber-900 transition-colors cursor-pointer font-semibold"
                       >
                         Use {p.name}
@@ -638,14 +639,14 @@ export default function TodayPage() {
               )}
 
               {(preview.errors.length > 0 || preview.warnings.length > 0) && (
-                <p className="text-[10px] text-rose-700 pl-8 mt-1 font-bold">
+                <p className="text-[10px] text-rose-705 pl-8 mt-1 font-bold">
                   {[...preview.errors, ...preview.warnings].join(' · ')}
                 </p>
               )}
             </div>
           ) : (
-            <div className="flex-1 flex items-center gap-2.5 text-xs text-stone-500 py-1 pl-1">
-              <Banknote className="w-4 h-4 text-stone-400 shrink-0" />
+            <div className="flex-1 flex items-center gap-2.5 text-xs text-stone-505 py-1 pl-1">
+              <Search className="w-4 h-4 text-stone-450 shrink-0" />
               <div>
                 <span>Type transaction details above to start quick recording.</span>
               </div>
@@ -654,14 +655,14 @@ export default function TodayPage() {
 
           {preview && (
             <button
-              onClick={() => void saveSmart()}
+              onClick={() => void handleSave()}
               disabled={
                 !preview.valid ||
                 saving ||
                 (preview.isNewPayee && similarPayees.length > 0 && !newPayeeConfirmed) ||
                 (isPossibleDuplicate && !duplicateConfirmed)
               }
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shrink-0 flex items-center gap-1.5 shadow-sm transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-4 py-2 bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-xs font-bold rounded-lg shrink-0 flex items-center gap-1.5 shadow-sm transition-all cursor-pointer border-none disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {saving ? 'Saving...' : 'Post outlay'}
               <ArrowRight className="w-3.5 h-3.5" />
@@ -677,8 +678,8 @@ export default function TodayPage() {
               {frequentPayees.map((payee) => (
                 <button
                   key={payee.id}
-                  onClick={() => usePayee(payee.name)}
-                  className="px-4 py-1 text-xs font-bold rounded-full bg-blue-50 text-blue-800 hover:bg-blue-100/80 transition-all duration-150 cursor-pointer border-none"
+                  onClick={() => setCommand(`${payee.name} `)}
+                  className="px-4 py-1 text-xs font-bold rounded-full bg-blue-50 text-blue-805 hover:bg-blue-100/80 transition-all duration-150 cursor-pointer border-none"
                 >
                   {payee.name}
                 </button>
@@ -692,7 +693,7 @@ export default function TodayPage() {
               {recentPayees.map((payee) => (
                 <button
                   key={payee.id}
-                  onClick={() => usePayee(payee.name)}
+                  onClick={() => setCommand(`${payee.name} `)}
                   className="px-4 py-1 text-xs font-semibold rounded-full bg-stone-100/85 text-stone-700 hover:bg-stone-200/80 transition-all duration-150 cursor-pointer border-none"
                 >
                   {payee.name}
@@ -703,19 +704,19 @@ export default function TodayPage() {
         </div>
       </div>
 
-      {/* 3. Stat Cards (No borders-as-separators, elevated via soft shadows, tinted circular icons top-left) */}
+      {/* 3. Stat Cards */}
       <section className="grid grid-cols-1 md:grid-cols-3 gap-6" aria-label="Workstation totals">
         {/* Total Outgoing Card */}
-        <article className="bg-white rounded-xl p-6 shadow-[0_1px_3px_rgba(0,0,0,0.02),0_4px_16px_rgba(0,0,0,0.02)] border border-stone-100/40 relative overflow-hidden transition-all duration-200 hover:shadow-[0_1px_4px_rgba(0,0,0,0.03),0_8px_24px_rgba(0,0,0,0.03)]">
+        <article className="bg-white rounded-xl p-6 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_1px_8px_rgba(0,0,0,0.03)] border border-stone-100/40 relative overflow-hidden transition-all duration-200 hover:shadow-md">
           <div className="flex items-start justify-between">
             <div className="space-y-1">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-stone-400">Total Outgoing</span>
-              <strong className="text-3xl font-mono text-stone-900 tracking-tight block py-2 tabular-nums">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-[#667085]">Total Outgoing</span>
+              <strong className="text-3xl font-mono text-[#111827] tracking-tight block py-2 tabular-nums">
                 {formatInr(dashboard?.totalOutgoingPaise ?? 0)}
               </strong>
             </div>
-            <span className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
-              <TrendingUp className="w-4 h-4" />
+            <span className="w-10 h-10 rounded-full bg-blue-50 text-[#2563EB] flex items-center justify-center shrink-0">
+              <ArrowRight className="w-5 h-5 rotate-45" />
             </span>
           </div>
           <div className="flex items-center justify-between border-t border-stone-100/60 pt-3.5 mt-3 text-[10px] text-stone-500 font-semibold">
@@ -724,11 +725,11 @@ export default function TodayPage() {
           </div>
         </article>
 
-        {/* Outgoing by Method split bar Card (Soft icon, clean split bar indicator) */}
-        <article className="bg-white rounded-xl p-6 shadow-[0_1px_3px_rgba(0,0,0,0.02),0_4px_16px_rgba(0,0,0,0.02)] border border-stone-100/40 relative overflow-hidden transition-all duration-200 hover:shadow-[0_1px_4px_rgba(0,0,0,0.03),0_8px_24px_rgba(0,0,0,0.03)]">
+        {/* Outgoing by Method split bar Card */}
+        <article className="bg-white rounded-xl p-6 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_1px_8px_rgba(0,0,0,0.03)] border border-stone-100/40 relative overflow-hidden transition-all duration-200 hover:shadow-md">
           <div className="flex items-start justify-between">
             <div className="space-y-1 flex-1">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-stone-400">Outgoing by Method</span>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-[#667085]">Outgoing by Method</span>
               <div className="grid grid-cols-2 gap-4 py-2">
                 <div>
                   <span className="text-[9px] font-extrabold text-stone-450 block uppercase">Cash</span>
@@ -744,8 +745,8 @@ export default function TodayPage() {
                 </div>
               </div>
             </div>
-            <span className="w-8 h-8 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
-              <CreditCard className="w-4 h-4" />
+            <span className="w-10 h-10 rounded-full bg-amber-50 text-[#F79009] flex items-center justify-center shrink-0">
+              <CreditCard className="w-5 h-5" />
             </span>
           </div>
 
@@ -774,25 +775,26 @@ export default function TodayPage() {
           </div>
         </article>
 
-        {/* Pending Reviews Card (Conditional soft red icon for pending state, neutral grey for verified state) */}
+        {/* Pending Reviews Card */}
         <article
-          className={`rounded-xl p-6 shadow-[0_1px_3px_rgba(0,0,0,0.02),0_4px_16px_rgba(0,0,0,0.02)] border border-stone-100/40 relative overflow-hidden transition-all duration-200 hover:shadow-[0_1px_4px_rgba(0,0,0,0.03),0_8px_24px_rgba(0,0,0,0.03)] ${
+          onClick={() => navigate('/review')}
+          className={`rounded-xl p-6 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_1px_8px_rgba(0,0,0,0.03)] border border-stone-100/40 relative overflow-hidden transition-all duration-200 hover:shadow-md cursor-pointer ${
             dashboard?.reviewCount && dashboard.reviewCount > 0 ? 'bg-amber-50/15 border-amber-100/60' : 'bg-white'
           }`}
         >
           <div className="flex items-start justify-between">
             <div className="space-y-1">
-              <span className={`text-[10px] font-bold uppercase tracking-wider ${dashboard?.reviewCount && dashboard.reviewCount > 0 ? 'text-amber-800' : 'text-stone-400'}`}>
+              <span className={`text-[10px] font-bold uppercase tracking-wider ${dashboard?.reviewCount && dashboard.reviewCount > 0 ? 'text-amber-800' : 'text-[#667085]'}`}>
                 Pending Reviews
               </span>
               <strong className={`text-3xl font-mono tracking-tight block py-2 ${dashboard?.reviewCount && dashboard.reviewCount > 0 ? 'text-amber-800' : 'text-stone-900'}`}>
                 {dashboard?.reviewCount ?? 0}
               </strong>
             </div>
-            <span className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
+            <span className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${
               dashboard?.reviewCount && dashboard.reviewCount > 0 ? 'bg-amber-100 text-amber-750' : 'bg-stone-50 text-stone-500'
             }`}>
-              <Inbox className="w-4 h-4" />
+              <Inbox className="w-5 h-5" />
             </span>
           </div>
           <div className="flex items-center justify-between border-t border-stone-100/60 pt-3.5 mt-3 text-[10px] text-stone-500 font-semibold">
@@ -806,7 +808,7 @@ export default function TodayPage() {
 
       {/* 4. Dashboard Table and Collapsible Desk Stats Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Outlay Ledger Table (Spans full page columns if Desk Status is collapsed!) */}
+        {/* Outlay Ledger Table */}
         <section className={`space-y-3 transition-all duration-300 ${isStatusOpen ? 'lg:col-span-2' : 'lg:col-span-3'}`}>
           <div className="flex items-center justify-between pb-1">
             <h2 className="text-xs font-bold uppercase tracking-wider text-stone-900 flex items-center gap-1.5">
@@ -814,20 +816,20 @@ export default function TodayPage() {
               Outlay Ledger
             </h2>
             <div className="flex items-center gap-3">
-              <span className="text-[10px] font-bold text-stone-500 uppercase tracking-wider bg-white border border-stone-200/80 px-2.5 py-0.5 rounded-lg">
+              <span className="text-[10px] font-bold text-stone-505 uppercase tracking-wider bg-white border border-stone-200/80 px-2.5 py-0.5 rounded-lg select-none">
                 {todaysItems.length} entries
               </span>
               <button
                 onClick={() => setIsStatusOpen(!isStatusOpen)}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold text-stone-600 hover:text-stone-900 border border-stone-200 bg-white rounded-lg cursor-pointer transition-colors shadow-3xs"
               >
-                <LayoutGrid className="w-3 h-3 text-stone-400" />
+                <LayoutGrid className="w-3 h-3 text-stone-400 animate-pulse" />
                 <span>{isStatusOpen ? 'Hide Stats' : 'Show Stats'}</span>
               </button>
             </div>
           </div>
 
-          <div className="bg-white rounded-xl overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.02),0_4px_16px_rgba(0,0,0,0.02)] border border-stone-100/50">
+          <div className="bg-white rounded-xl overflow-hidden shadow-[0_1px_2px_rgba(0,0,0,0.04),0_1px_8px_rgba(0,0,0,0.03)] border border-[#E5E7EB]/50">
             {todaysItems.length > 0 ? (
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse text-xs">
@@ -842,7 +844,7 @@ export default function TodayPage() {
                       <th className="py-2.5 px-5 w-[4%] text-right font-bold"></th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-stone-100/50">
+                  <tbody className="divide-y divide-stone-100/55">
                     {todaysItems.map((item) => (
                       <tr
                         key={item.id}
@@ -856,8 +858,20 @@ export default function TodayPage() {
                         <td className="py-3.5 px-5 text-stone-550 font-mono font-semibold tabular-nums">
                           {formatTime12(item.transactionTime)}
                         </td>
-                        <td className="py-3.5 px-5 font-bold text-stone-900">
-                          {item.payeeName}
+                        <td className="py-3.5 px-5">
+                          <div className="flex items-center gap-2.5">
+                            <PayeeAvatar name={item.payeeName} size={28} />
+                            <div>
+                              <span className="font-bold text-stone-900 block group-hover:text-[#2563EB] transition-all">
+                                {item.payeeName}
+                              </span>
+                              {item.note && (
+                                <p className="text-[10px] text-stone-400 line-clamp-1 leading-none mt-0.5">
+                                  {item.note}
+                                </p>
+                              )}
+                            </div>
+                          </div>
                         </td>
                         <td className="py-3.5 px-5 text-stone-600 font-semibold">
                           {item.categoryName || (
@@ -868,11 +882,11 @@ export default function TodayPage() {
                         </td>
                         <td className="py-3.5 px-5">
                           {item.paymentMethodCode?.toLowerCase() === 'cash' ? (
-                            <span className="bg-amber-50 text-amber-800 rounded-md px-2 py-0.5 font-bold uppercase font-mono text-[9px] border border-amber-100">
+                            <span className="bg-amber-50 text-amber-805 rounded-md px-2 py-0.5 font-bold uppercase font-mono text-[9px] border border-amber-100">
                               CASH
                             </span>
                           ) : (
-                            <span className="bg-blue-50 text-blue-800 rounded-md px-2 py-0.5 font-bold uppercase font-mono text-[9px] border border-blue-100">
+                            <span className="bg-blue-50 text-blue-805 rounded-md px-2 py-0.5 font-bold uppercase font-mono text-[9px] border border-blue-100">
                               {item.paymentMethodCode}
                             </span>
                           )}
@@ -921,7 +935,7 @@ export default function TodayPage() {
               </h2>
             </div>
 
-            <div className="bg-white rounded-xl p-6 space-y-5 shadow-[0_1px_3px_rgba(0,0,0,0.02),0_4px_16px_rgba(0,0,0,0.02)] border border-stone-100/50">
+            <div className="bg-white rounded-xl p-6 space-y-5 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_1px_8px_rgba(0,0,0,0.03)] border border-stone-100/50">
               <header className="border-b border-stone-100 pb-3">
                 <span className="text-[10px] uppercase font-bold text-stone-400 block">System Date</span>
                 <strong className="text-base font-bold text-stone-900 block mt-0.5 font-sans">
@@ -949,56 +963,49 @@ export default function TodayPage() {
                   </dd>
                 </div>
               </dl>
-
-              <div className="p-4 bg-stone-50 border border-stone-200/50 rounded-xl space-y-1.5 text-[11px] text-stone-500 font-semibold leading-relaxed">
-                <div className="flex items-center gap-1.5 text-stone-800 font-bold mb-1">
-                  <HelpCircle className="w-4 h-4 text-stone-400 shrink-0" />
-                  <span>Helpful Reminders</span>
-                </div>
-                <p>
-                  Click on any transaction logged today to show the audit logs drawer and correct or void details.
-                </p>
-              </div>
             </div>
           </section>
         )}
       </div>
 
-      {/* Drawers and modals components */}
-      {master && (
-        <>
-          <DetailedEntryDrawer
-            open={detailedOpen}
-            onClose={() => setDetailedOpen(false)}
-            master={master}
-            onSaved={handleRefresh}
-          />
-
-          <BatchEntryModal
-            open={batchOpen}
-            onClose={() => setBatchOpen(false)}
-            master={master}
-            onSaved={handleRefresh}
-          />
-
-          <QuickReviewModal
-            open={reviewOpen}
-            onClose={() => {
-              setReviewOpen(false);
-              setReviewTransaction(null);
-            }}
-            master={master}
-            transaction={reviewTransaction}
-            onSaved={handleRefresh}
-          />
-        </>
+      {/* Modals & Drawers */}
+      {selectedTransaction && (
+        <TransactionDrawer
+          transaction={selectedTransaction}
+          onClose={() => setSelectedTransaction(null)}
+        />
       )}
 
-      <TransactionDetailDrawer
-        open={selectedTransaction !== null}
-        onClose={() => setSelectedTransaction(null)}
-        transaction={selectedTransaction}
-      />
+      {detailedOpen && (
+        <DetailedEntryDrawer
+          open={detailedOpen}
+          onClose={() => setDetailedOpen(false)}
+          master={master!}
+          onSaved={handleRefresh}
+        />
+      )}
+
+      {batchOpen && (
+        <BatchEntryModal
+          open={batchOpen}
+          onClose={() => setBatchOpen(false)}
+          master={master!}
+          onSaved={handleRefresh}
+        />
+      )}
+
+      {reviewOpen && reviewTransaction && (
+        <QuickReviewModal
+          open={reviewOpen}
+          onClose={() => {
+            setReviewOpen(false);
+            setReviewTransaction(null);
+          }}
+          transaction={reviewTransaction}
+          master={master!}
+          onSaved={handleRefresh}
+        />
+      )}
     </div>
   );
 }
