@@ -15,28 +15,30 @@
 }
 
 :root {
-  /* Ledger OS specific palette variables */
-  --ledger-ink: #10213f;
-  --ledger-blue: #2864c7;
-  --ledger-blue-hover: #1f55ad;
-  --ledger-selection: #e8f0fd;
-  --ledger-workspace: #fafafa;
+  /* Ledger OS specific palette variables - Notion / Apple warm gray scale */
+  --ledger-ink: #1c1917;
+  --ledger-blue: #2563eb;
+  --ledger-blue-hover: #1d4ed8;
+  --ledger-selection: #f5f5f4;
+  --ledger-workspace: #fafaf9;
   --ledger-surface: #ffffff;
-  --ledger-border: #f1f5f9;
-  --ledger-muted: #64748b;
-  --ledger-review: #e11d48;
+  --ledger-border: #f5f5f4;
+  --ledger-muted: #78716c;
+  --ledger-review: #dc2626;
 
   /* Motion scales */
-  --motion-fast: 120ms;
-  --motion-base: 180ms;
-  --motion-slow: 260ms;
-  --motion-ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --motion-fast: 150ms;
+  --motion-base: 200ms;
+  --motion-slow: 300ms;
+  --motion-ease: cubic-bezier(0.16, 1, 0.3, 1);
 
-  /* Radius */
+  /* Radius scale */
+  --radius-small: 8px;
   --radius-base: 10px;
-  --radius-container: 16px;
+  --radius-container: 12px;
+  --radius-large: 16px;
 
   /* Layout and sizing */
   --base-font-size: 15px;
-  --base-line-height: 1.45;
+  --base-line-height: 1.5;
 }

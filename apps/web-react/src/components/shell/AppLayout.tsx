@@ -123,20 +123,20 @@ export default function AppLayout() {
   ];
 
   return (
-    <div className="min-h-screen flex flex-col bg-white text-slate-900 font-sans">
+    <div className="min-h-screen flex flex-col bg-ledger-workspace text-stone-900 font-sans">
       <main className="flex-1 w-full max-w-[1600px] mx-auto p-6 focus:outline-none flex flex-col">
-        {/* Centered Segmented Control Navigation Bar (No icons, no top header row, styled via Tailwind) */}
-        <div className="flex justify-center mb-8 select-none">
-          <nav className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl shadow-2xs" aria-label="Primary navigation">
+        {/* Centered Segmented Control Navigation Bar (No icons, transparent nav strip, generous spacing) */}
+        <div className="flex justify-center mb-10 select-none">
+          <nav className="flex items-center gap-6" aria-label="Primary navigation">
             {navItems.map((item) => (
               <NavLink
                 key={item.path}
                 to={item.path}
                 className={({ isActive }) =>
-                  `flex items-center gap-1 px-4 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+                  `flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all duration-150 cursor-pointer ${
                     isActive
-                      ? 'bg-white text-slate-900 shadow-sm font-bold'
-                      : 'text-slate-500 hover:text-slate-800'
+                      ? 'bg-stone-900 text-white font-bold'
+                      : 'text-stone-500 hover:text-stone-900 hover:bg-stone-100/60'
                   }`
                 }
               >
