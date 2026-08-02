@@ -347,39 +347,36 @@ export default function TodayPage() {
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
-      {/* Dynamic Glassmorphic Hero Greeting */}
-      <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-br from-slate-900 via-ledger-ink to-[#1a2e4c] text-white p-6 rounded-2xl border border-slate-800 shadow-md">
+      {/* Clean Light Page Title bar (No large dark header cards!) */}
+      <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/80 pb-5">
         <div>
-          <span className="text-[10px] tracking-widest font-mono text-ledger-blue uppercase font-bold bg-ledger-blue/10 px-2 py-0.5 rounded border border-ledger-blue/20">
-            Cash Desk Workstation
-          </span>
-          <h1 className="text-2xl font-bold tracking-tight text-white mt-2 font-sans">
+          <h1 className="text-xl font-bold tracking-tight text-slate-900 font-sans">
             Today
           </h1>
-          <p className="text-xs text-slate-300 mt-1 leading-normal font-medium max-w-lg">
-            Good morning, Operator. Record cash outlays, digital transfers, and audit payee account statements. Keyboard shortcuts remain active.
+          <p className="text-xs text-slate-500 mt-1 font-medium">
+            Good morning, Operator. Record outlays, track cash distributions, and complete category reviews.
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3 shrink-0">
+        <div className="flex items-center gap-2.5">
           <button
             onClick={handleRefresh}
             disabled={loading}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:text-white border border-slate-700 hover:border-slate-500 rounded-lg transition-colors cursor-pointer bg-slate-950/20"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 border border-slate-200 rounded-lg transition-all cursor-pointer bg-white"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
             Refresh
           </button>
           <button
             onClick={() => setBatchOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:text-white border border-slate-700 hover:border-slate-500 rounded-lg transition-colors cursor-pointer bg-slate-950/20"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 border border-slate-200 rounded-lg transition-all cursor-pointer bg-white"
           >
             <ListPlus className="w-3.5 h-3.5" />
             Batch Entry
           </button>
           <button
             onClick={() => setDetailedOpen(true)}
-            className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-bold bg-gradient-to-r from-ledger-blue to-indigo-600 hover:from-ledger-blue hover:to-indigo-500 text-white rounded-lg transition-all shadow-md cursor-pointer hover:shadow-lg hover:-translate-y-0.5 duration-150"
+            className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold bg-ledger-blue hover:bg-ledger-blue-hover text-white rounded-lg shadow-sm hover:shadow-md transition-all cursor-pointer"
           >
             <FileText className="w-3.5 h-3.5" />
             Detailed Form
@@ -387,28 +384,30 @@ export default function TodayPage() {
         </div>
       </header>
 
-      {/* Metric Cards Row */}
+      {/* Modern Soft Metrics Cards */}
       <section className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4" aria-label="Workstation totals">
-        <article className="ledger-card flex flex-col justify-between p-5 border-ledger-border bg-white shadow-xs relative overflow-hidden group hover:border-ledger-blue/40 transition-colors">
-          <div className="flex items-center justify-between text-ledger-muted">
-            <span className="text-xs font-semibold uppercase tracking-wider">Total Outgoing</span>
+        <article className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs relative overflow-hidden group hover:border-ledger-blue/40 transition-colors">
+          <div className="absolute top-0 left-0 w-1 h-full bg-ledger-blue" />
+          <div className="flex items-center justify-between text-slate-500">
+            <span className="text-xs font-bold uppercase tracking-wider">Total Outgoing</span>
             <TrendingUp className="w-4 h-4 text-ledger-blue" />
           </div>
-          <strong className="text-2xl font-mono text-ledger-ink tracking-tight mt-3 block tabular-nums">
+          <strong className="text-2xl font-mono text-slate-900 tracking-tight mt-3 block tabular-nums">
             {formatInr(dashboard?.totalOutgoingPaise ?? 0)}
           </strong>
-          <div className="flex items-center justify-between border-t border-ledger-border/40 pt-2.5 mt-3 text-[10px] text-ledger-muted font-medium">
-            <span>Posted ledger</span>
+          <div className="flex items-center justify-between border-t border-slate-100 pt-2.5 mt-3 text-[10px] text-slate-500 font-semibold">
+            <span>Posted today</span>
             <span>{dashboard?.paymentCount ?? 0} payments</span>
           </div>
         </article>
 
-        <article className="ledger-card flex flex-col justify-between p-5 border-ledger-border bg-white shadow-xs relative overflow-hidden group hover:border-ledger-blue/40 transition-colors">
-          <div className="flex items-center justify-between text-ledger-muted">
-            <span className="text-xs font-semibold uppercase tracking-wider">Cash Ledger</span>
-            <Banknote className="w-4 h-4 text-amber-600" />
+        <article className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs relative overflow-hidden group hover:border-amber-400 transition-colors">
+          <div className="absolute top-0 left-0 w-1 h-full bg-amber-500" />
+          <div className="flex items-center justify-between text-slate-500">
+            <span className="text-xs font-bold uppercase tracking-wider">Cash Ledger</span>
+            <Banknote className="w-4 h-4 text-amber-55" />
           </div>
-          <strong className="text-2xl font-mono text-ledger-ink tracking-tight mt-3 block tabular-nums">
+          <strong className="text-2xl font-mono text-slate-900 tracking-tight mt-3 block tabular-nums">
             {formatInr(dashboard?.cashPaise ?? 0)}
           </strong>
           <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden mt-3.5">
@@ -420,17 +419,18 @@ export default function TodayPage() {
                     : 0
                 }%`
               }}
-              className="bg-amber-55 h-full rounded-full"
+              className="bg-amber-500 h-full rounded-full"
             />
           </div>
         </article>
 
-        <article className="ledger-card flex flex-col justify-between p-5 border-ledger-border bg-white shadow-xs relative overflow-hidden group hover:border-ledger-blue/40 transition-colors">
-          <div className="flex items-center justify-between text-ledger-muted">
-            <span className="text-xs font-semibold uppercase tracking-wider">Digital Ledger</span>
-            <CreditCard className="w-4 h-4 text-indigo-600" />
+        <article className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs relative overflow-hidden group hover:border-indigo-400 transition-colors">
+          <div className="absolute top-0 left-0 w-1 h-full bg-indigo-500" />
+          <div className="flex items-center justify-between text-slate-500">
+            <span className="text-xs font-bold uppercase tracking-wider">Digital Ledger</span>
+            <CreditCard className="w-4 h-4 text-indigo-500" />
           </div>
-          <strong className="text-2xl font-mono text-ledger-ink tracking-tight mt-3 block tabular-nums">
+          <strong className="text-2xl font-mono text-slate-900 tracking-tight mt-3 block tabular-nums">
             {formatInr(dashboard?.digitalPaise ?? 0)}
           </strong>
           <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden mt-3.5">
@@ -442,52 +442,45 @@ export default function TodayPage() {
                     : 0
                 }%`
               }}
-              className="bg-ledger-blue h-full rounded-full"
+              className="bg-indigo-500 h-full rounded-full"
             />
           </div>
         </article>
 
         <article
-          className={`ledger-card flex flex-col justify-between p-5 border-ledger-border bg-white shadow-xs relative overflow-hidden transition-all ${
+          className={`border p-5 rounded-xl bg-white shadow-xs relative overflow-hidden transition-all ${
             dashboard?.reviewCount && dashboard.reviewCount > 0
-              ? 'bg-amber-50/10 border-amber-250 ring-1 ring-amber-100 shadow-[0_0_12px_rgba(245,158,11,0.06)]'
-              : 'hover:border-ledger-blue/40'
+              ? 'border-amber-300 ring-1 ring-amber-100 shadow-[0_0_12px_rgba(245,158,11,0.04)]'
+              : 'border-slate-200 hover:border-rose-400'
           }`}
         >
-          <div className="flex items-center justify-between text-ledger-muted">
-            <span className={`text-xs font-semibold uppercase tracking-wider ${dashboard?.reviewCount && dashboard.reviewCount > 0 ? 'text-amber-800' : ''}`}>
+          <div className="absolute top-0 left-0 w-1 h-full bg-rose-500" />
+          <div className="flex items-center justify-between text-slate-500">
+            <span className={`text-xs font-bold uppercase tracking-wider ${dashboard?.reviewCount && dashboard.reviewCount > 0 ? 'text-amber-800' : ''}`}>
               Pending Reviews
             </span>
             <Inbox className={`w-4 h-4 ${dashboard?.reviewCount && dashboard.reviewCount > 0 ? 'text-amber-600' : ''}`} />
           </div>
-          <strong className={`text-2xl font-mono tracking-tight mt-3 block ${dashboard?.reviewCount && dashboard.reviewCount > 0 ? 'text-amber-800' : 'text-ledger-ink'}`}>
+          <strong className={`text-2xl font-mono tracking-tight mt-3 block ${dashboard?.reviewCount && dashboard.reviewCount > 0 ? 'text-amber-800' : 'text-slate-900'}`}>
             {dashboard?.reviewCount ?? 0}
           </strong>
-          <div className="flex items-center justify-between border-t border-ledger-border/40 pt-2.5 mt-3 text-[10px] text-ledger-muted font-medium">
+          <div className="flex items-center justify-between border-t border-slate-100 pt-2.5 mt-3 text-[10px] text-slate-500 font-semibold">
             <span>Requires category map</span>
-            <span className={dashboard?.reviewCount && dashboard.reviewCount > 0 ? 'text-amber-800 font-extrabold' : ''}>
-              {dashboard?.reviewCount && dashboard.reviewCount > 0 ? 'Attention Needed' : 'Clean'}
+            <span className={dashboard?.reviewCount && dashboard.reviewCount > 0 ? 'text-amber-700 font-bold' : ''}>
+              {dashboard?.reviewCount && dashboard.reviewCount > 0 ? 'Review Needed' : 'Clean'}
             </span>
           </div>
         </article>
       </section>
 
-      {/* Main Grid Dashboard */}
+      {/* Main Content Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Column (Quick Entry Console) */}
+        {/* Left Grid Content */}
         <section className="lg:col-span-2 space-y-6">
-          {/* Command Console Card */}
-          <div className="ledger-card p-0 overflow-hidden border-ledger-border shadow-sm flex flex-col bg-white">
-            <header className="px-5 py-3 border-b border-ledger-border/60 bg-ledger-workspace/30 flex items-center justify-between text-[11px] font-semibold text-ledger-muted">
-              <span>SMART COMMAND STATION</span>
-              <span className="font-mono text-[9px] uppercase tracking-wider bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded">
-                Keyboard Active
-              </span>
-            </header>
-
-            {/* Input Bar */}
-            <div className="flex items-center h-16 border-b border-ledger-border/80 bg-white relative">
-              <span className="w-14 h-full border-r border-ledger-border/60 text-ledger-blue flex items-center justify-center text-2xl font-black select-none bg-ledger-workspace/20">
+          {/* Minimal clean Command Console */}
+          <div className="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden flex flex-col">
+            <div className="flex items-center h-14 bg-white relative">
+              <span className="w-12 h-full border-r border-slate-100 text-slate-400 flex items-center justify-center text-xl font-bold select-none bg-slate-50/50">
                 ₹
               </span>
               <input
@@ -504,16 +497,16 @@ export default function TodayPage() {
                 }}
                 onKeyDown={handleCommandKey}
                 placeholder="Payee, amount, date, method, purpose..."
-                className="flex-1 h-full px-5 text-lg font-bold tracking-tight text-ledger-ink border-none outline-none focus:ring-0 focus:outline-none"
+                className="flex-1 h-full px-4 text-[15px] font-bold tracking-tight text-slate-800 border-none outline-none focus:ring-0 focus:outline-none"
                 autoComplete="off"
                 autoFocus
               />
-              <kbd className="mr-5 text-[9px] select-none uppercase font-extrabold text-ledger-muted bg-ledger-workspace border border-ledger-border px-2 py-1 rounded-md shadow-2xs">
-                Enter ↵
+              <kbd className="mr-4 text-[9px] select-none uppercase font-extrabold text-slate-500 bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded shadow-2xs">
+                Enter
               </kbd>
             </div>
 
-            {/* Suggestions dropdown overlay */}
+            {/* Suggestions drop-down matching aliases */}
             <AnimatePresence>
               {commandPayeeSuggestions.length > 0 && suggestionIndex >= 0 && (
                 <motion.div
@@ -524,12 +517,12 @@ export default function TodayPage() {
                   id="payee-listbox"
                   role="listbox"
                   aria-label="Payee matches"
-                  className="p-3.5 border-b border-ledger-border/60 bg-white flex flex-col gap-2.5 overflow-hidden"
+                  className="p-3 border-t border-slate-100 bg-slate-50/40 flex flex-col gap-2 overflow-hidden"
                 >
-                  <div className="flex items-center justify-between text-[10px] text-ledger-muted font-medium">
-                    <span>Payee Suggestions matched by alias/prefix:</span>
+                  <div className="flex items-center justify-between text-[10px] text-slate-400 font-bold px-1">
+                    <span>SUGGESTED ALIAS & NAME MATCHES</span>
                     <span>
-                      Move <kbd className="text-[9px]">↑↓</kbd> · Select <kbd className="text-[9px]">Tab</kbd>
+                      Use <kbd className="text-[9px]">↑↓</kbd> or <kbd className="text-[9px]">Tab</kbd> to select
                     </span>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
@@ -539,26 +532,23 @@ export default function TodayPage() {
                         role="option"
                         aria-selected={idx === suggestionIndex}
                         onClick={() => chooseCommandPayee(payee)}
-                        className={`flex items-center justify-between p-2.5 rounded-lg border cursor-pointer select-none transition-colors ${
+                        className={`flex items-center justify-between p-2 rounded-lg border cursor-pointer select-none transition-colors ${
                           idx === suggestionIndex
-                            ? 'border-ledger-blue bg-ledger-selection/65 shadow-2xs'
-                            : 'border-ledger-border hover:bg-ledger-workspace'
+                            ? 'border-ledger-blue bg-white text-ledger-ink shadow-2xs'
+                            : 'border-slate-200 bg-white hover:bg-slate-50/80 text-slate-700'
                         }`}
                       >
                         <div className="flex items-center gap-2 overflow-hidden">
-                          <span className="w-7 h-7 rounded-md bg-ledger-blue/10 text-ledger-blue flex items-center justify-center font-bold text-xs uppercase shrink-0">
+                          <span className="w-6 h-6 rounded bg-slate-100 text-slate-600 flex items-center justify-center font-bold text-[10px] uppercase shrink-0">
                             {payee.name.slice(0, 2)}
                           </span>
                           <div className="truncate text-xs">
-                            <strong className="text-ledger-ink block font-semibold truncate leading-normal">
+                            <strong className="text-slate-900 block font-bold truncate leading-normal">
                               {payee.name}
                             </strong>
-                            <span className="text-[10px] text-ledger-muted capitalize font-medium leading-none block mt-0.5">
-                              {payee.type}
-                            </span>
                           </div>
                         </div>
-                        <ChevronRight className="w-3 h-3 text-ledger-muted/60" />
+                        <ChevronRight className="w-3 h-3 text-slate-400" />
                       </div>
                     ))}
                   </div>
@@ -566,36 +556,36 @@ export default function TodayPage() {
               )}
             </AnimatePresence>
 
-            {/* Parsed validation preview panel */}
+            {/* Validation smart preview panel */}
             <div
-              className={`px-5 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 ${
-                preview && !preview.valid ? 'bg-red-50/15' : 'bg-ledger-workspace/15'
+              className={`px-5 py-3.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-t border-slate-100 ${
+                preview && !preview.valid ? 'bg-red-50/10' : 'bg-slate-50/40'
               }`}
             >
               {preview ? (
-                <div className="flex-1 flex flex-col gap-2.5">
-                  <div className="flex items-center gap-3">
+                <div className="flex-1 flex flex-col gap-2">
+                  <div className="flex items-center gap-2.5">
                     <span
-                      className={`flex items-center justify-center w-6 h-6 rounded-full shrink-0 ${
-                        preview.valid ? 'text-emerald-700 bg-emerald-100' : 'text-ledger-muted bg-ledger-workspace'
+                      className={`flex items-center justify-center w-5.5 h-5.5 rounded-full shrink-0 ${
+                        preview.valid ? 'text-emerald-700 bg-emerald-100' : 'text-slate-400 bg-slate-100'
                       }`}
                     >
-                      {preview.valid ? <CheckCircle2 className="w-4 h-4" /> : <Search className="w-4 h-4" />}
+                      {preview.valid ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Search className="w-3.5 h-3.5" />}
                     </span>
                     <div className="text-xs">
-                      <span className="text-ledger-muted font-bold block uppercase tracking-wider text-[9px]">Parsed Payment</span>
-                      <strong className="text-ledger-ink font-bold text-sm block mt-0.5">
-                        {preview.payeeName || 'Choose a known payee'} ·{' '}
+                      <span className="text-slate-400 font-bold block uppercase tracking-wider text-[9px]">Parsed payment</span>
+                      <strong className="text-slate-900 font-bold text-sm block mt-0.5">
+                        {preview.payeeName || 'Choose payee'} ·{' '}
                         {preview.amountPaise ? formatInr(preview.amountPaise) : 'Amount missing'}
                       </strong>
                     </div>
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[10px] text-ledger-muted pl-9 font-semibold">
-                    <span className="bg-white border border-ledger-border px-2 py-0.5 rounded">
+                  <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[10px] text-slate-500 pl-8 font-semibold">
+                    <span className="bg-white border border-slate-200 px-1.5 py-0.5 rounded">
                       {preview.paymentMethodName || 'Method required'}
                     </span>
-                    <span className="bg-white border border-ledger-border px-2 py-0.5 rounded">
+                    <span className="bg-white border border-slate-200 px-1.5 py-0.5 rounded">
                       {preview.categoryName || 'Category required'}
                     </span>
                     <span>
@@ -608,21 +598,21 @@ export default function TodayPage() {
                   </div>
 
                   {preview.isNewPayee && similarPayees.length > 0 && !newPayeeConfirmed && (
-                    <div className="mt-2.5 p-3 bg-amber-50 border border-amber-250 rounded-lg pl-9 text-xs text-amber-800">
-                      <strong className="font-semibold block mb-1">Warning: Similar payee alias matches found</strong>
-                      <div className="flex flex-wrap gap-2 mt-2">
+                    <div className="mt-2 p-2.5 bg-amber-50 border border-amber-200 rounded-lg pl-8 text-xs text-amber-900">
+                      <strong className="font-bold block mb-1">Similar payees exist:</strong>
+                      <div className="flex flex-wrap gap-2 mt-1.5">
                         {similarPayees.map((p) => (
                           <button
                             key={p.id}
                             onClick={() => useSimilarPayee(p.name)}
-                            className="px-2 py-1 bg-white border border-amber-200 hover:border-amber-400 rounded text-[11px] text-amber-900 transition-colors cursor-pointer"
+                            className="px-2 py-0.5 bg-white border border-amber-300 hover:border-amber-500 rounded text-[11px] text-amber-900 transition-colors cursor-pointer font-semibold"
                           >
                             Use {p.name}
                           </button>
                         ))}
                         <button
                           onClick={() => setNewPayeeConfirmed(true)}
-                          className="px-2.5 py-1 bg-amber-800 text-white rounded text-[11px] hover:bg-amber-900 transition-colors cursor-pointer"
+                          className="px-2 py-0.5 bg-amber-800 text-white rounded text-[11px] hover:bg-amber-900 transition-colors cursor-pointer font-bold"
                         >
                           Create “{preview.payeeName}” anyway
                         </button>
@@ -631,19 +621,16 @@ export default function TodayPage() {
                   )}
 
                   {(preview.errors.length > 0 || preview.warnings.length > 0) && (
-                    <p className="text-[11px] text-ledger-review/85 pl-9 mt-1 font-bold">
+                    <p className="text-[10px] text-rose-700 pl-8 mt-1 font-bold">
                       {[...preview.errors, ...preview.warnings].join(' · ')}
                     </p>
                   )}
                 </div>
               ) : (
-                <div className="flex-1 flex items-center gap-3 text-xs text-ledger-muted py-1">
-                  <Banknote className="w-5 h-5 text-ledger-muted/70 shrink-0" />
+                <div className="flex-1 flex items-center gap-2.5 text-xs text-slate-500 py-1">
+                  <Banknote className="w-4 h-4 text-slate-400 shrink-0" />
                   <div>
-                    <span>Cash is the default payment method.</span>
-                    <small className="block text-[10px] text-ledger-muted/70 mt-0.5">
-                      New payee names are automatically saved for verification in Review.
-                    </small>
+                    <span>Type transaction details above to start quick recording.</span>
                   </div>
                 </div>
               )}
@@ -656,17 +643,17 @@ export default function TodayPage() {
                     saving ||
                     (preview.isNewPayee && similarPayees.length > 0 && !newPayeeConfirmed)
                   }
-                  className="btn btn-primary text-xs py-2.5 px-4.5 shrink-0 flex items-center gap-1.5 shadow-sm hover:shadow-md cursor-pointer duration-100"
+                  className="btn btn-primary text-xs py-2 px-3 shrink-0 flex items-center gap-1 shadow-sm cursor-pointer"
                 >
-                  {saving ? 'Saving...' : 'Post payment'}
+                  {saving ? 'Saving...' : 'Post outlay'}
                   <ArrowRight className="w-3.5 h-3.5" />
                 </button>
               )}
             </div>
 
-            {/* Quick payees chips row */}
-            <div className="px-5 py-3.5 flex flex-wrap items-center gap-2 bg-ledger-workspace/20 border-t border-ledger-border/40 select-none">
-              <span className="text-xs font-semibold text-ledger-muted mr-1.5">Quick payees</span>
+            {/* Quick entry links row */}
+            <div className="px-5 py-3 flex flex-wrap items-center gap-1.5 bg-slate-50/20 border-t border-slate-100 select-none">
+              <span className="text-[11px] font-bold text-slate-400 mr-2 uppercase tracking-wider">Quick payees</span>
               {master?.payees && master.payees.filter((p) => p.favourite || p.paymentCount > 0).length > 0 ? (
                 master.payees
                   .filter((p) => p.favourite || p.paymentCount > 0)
@@ -680,83 +667,83 @@ export default function TodayPage() {
                     <button
                       key={payee.id}
                       onClick={() => usePayee(payee.name)}
-                      className={`px-3 py-1 text-xs font-semibold rounded-full border transition-all duration-100 cursor-pointer ${
+                      className={`px-2.5 py-0.5 text-xs font-semibold rounded-md border transition-all duration-100 cursor-pointer ${
                         payee.favourite
-                          ? 'bg-amber-50 text-amber-800 border-amber-255 hover:bg-amber-100 hover:border-amber-350 shadow-2xs'
-                          : 'bg-white text-ledger-ink border-ledger-border hover:bg-ledger-workspace hover:border-slate-300'
+                          ? 'bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100 hover:border-amber-350 shadow-3xs'
+                          : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50 hover:border-slate-350'
                       }`}
                     >
-                      {payee.favourite && <span className="text-amber-500 mr-1 font-bold">★</span>}
+                      {payee.favourite && <span className="text-amber-500 mr-0.5">★</span>}
                       {payee.name}
                     </button>
                   ))
               ) : (
-                <span className="text-[11px] text-ledger-muted font-medium">
+                <span className="text-[11px] text-slate-400 font-semibold">
                   Frequent or favourite payees will appear here as quick entry links.
                 </span>
               )}
             </div>
           </div>
 
-          {/* Recent payments table panel */}
-          <div className="space-y-3.5">
-            <div className="flex items-center justify-between border-b border-ledger-border pb-1.5">
-              <h2 className="text-xs font-bold uppercase tracking-wider text-ledger-ink flex items-center gap-1.5">
-                <Clock className="w-3.5 h-3.5 text-ledger-blue" />
-                Recent Payments Log
+          {/* Recent payments table */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between pb-1">
+              <h2 className="text-xs font-bold uppercase tracking-wider text-slate-900 flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5 text-slate-500" />
+                Outlay Ledger
               </h2>
-              <span className="text-[10px] font-bold text-ledger-muted uppercase tracking-wider bg-ledger-workspace border border-ledger-border px-2 py-0.5 rounded">
-                {todaysItems.length} transactions
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider bg-white border border-slate-200 px-2 py-0.5 rounded-md">
+                {todaysItems.length} entries
               </span>
             </div>
 
-            <div className="ledger-card p-0 overflow-hidden border-ledger-border shadow-sm bg-white">
+            <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-xs">
               {todaysItems.length > 0 ? (
                 <div className="overflow-x-auto">
                   <table className="w-full text-left border-collapse text-xs">
                     <thead>
-                      <tr className="border-b border-ledger-border bg-ledger-workspace/30 text-ledger-muted font-semibold">
-                        <th className="py-2 px-4 w-[16%] text-right font-semibold">Amount</th>
-                        <th className="py-2 px-4 w-[28%] font-semibold">Payee</th>
-                        <th className="py-2 px-4 w-[22%] font-semibold">Category</th>
-                        <th className="py-2 px-4 w-[12%] font-semibold">Method</th>
-                        <th className="py-2 px-4 w-[22%] font-semibold">Purpose</th>
-                        <th className="py-2 px-4 text-right font-semibold">Status</th>
+                      <tr className="border-b border-slate-100 bg-slate-50/50 text-slate-500 font-semibold">
+                        <th className="py-2.5 px-4 w-[16%] text-right font-bold">Amount</th>
+                        <th className="py-2.5 px-4 w-[28%] font-bold">Payee</th>
+                        <th className="py-2.5 px-4 w-[22%] font-bold">Category</th>
+                        <th className="py-2.5 px-4 w-[12%] font-bold">Method</th>
+                        <th className="py-2.5 px-4 w-[22%] font-bold">Purpose</th>
+                        <th className="py-2.5 px-4 text-right font-bold">Status</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-ledger-border/40">
+                    <tbody className="divide-y divide-slate-100">
                       {todaysItems.map((item) => (
                         <tr
                           key={item.id}
                           onClick={() => setSelectedTransaction(item)}
-                          className="hover:bg-ledger-selection/15 cursor-pointer transition-colors group"
+                          className="hover:bg-slate-50/80 cursor-pointer transition-colors group"
                         >
-                          <td className="py-3 px-4 text-right font-mono font-bold text-ledger-ink group-hover:text-ledger-blue tabular-nums">
+                          <td className="py-3 px-4 text-right font-mono font-bold text-slate-950 group-hover:text-ledger-blue tabular-nums">
                             {formatInr(item.amountPaise)}
                           </td>
-                          <td className="py-3 px-4 font-bold text-ledger-ink">
+                          <td className="py-3 px-4 font-bold text-slate-900">
                             {item.payeeName}
                           </td>
-                          <td className="py-3 px-4 text-ledger-muted font-semibold">
+                          <td className="py-3 px-4 text-slate-600 font-semibold">
                             {item.categoryName || (
-                              <span className="text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                              <span className="text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 text-[10px]">
                                 Review required
                               </span>
                             )}
                           </td>
-                          <td className="py-3 px-4 text-ledger-muted font-semibold uppercase font-mono text-[10px]">
+                          <td className="py-3 px-4 text-slate-500 font-semibold uppercase font-mono text-[10px]">
                             {item.paymentMethodCode}
                           </td>
-                          <td className="py-3 px-4 text-ledger-muted font-medium truncate max-w-[150px]">
+                          <td className="py-3 px-4 text-slate-500 font-medium truncate max-w-[150px]">
                             {item.note || '—'}
                           </td>
                           <td className="py-3 px-4 text-right">
                             {item.needsReview ? (
-                              <span className="px-2 py-0.5 text-[9px] font-bold bg-amber-50 text-amber-800 rounded-full border border-amber-255">
+                              <span className="px-2 py-0.5 text-[9px] font-bold bg-amber-50 text-amber-700 rounded-full border border-amber-200">
                                 Review
                               </span>
                             ) : (
-                              <span className="px-2 py-0.5 text-[9px] font-bold bg-emerald-50 text-emerald-700 rounded-full border border-emerald-250">
+                              <span className="px-2 py-0.5 text-[9px] font-bold bg-slate-100 text-slate-700 rounded-full border border-slate-200">
                                 Posted
                               </span>
                             )}
@@ -767,9 +754,9 @@ export default function TodayPage() {
                   </table>
                 </div>
               ) : (
-                <div className="py-16 px-6 text-center space-y-3 text-ledger-muted">
-                  <Banknote className="w-8 h-8 mx-auto text-ledger-muted/60 bg-ledger-workspace p-1.5 rounded-full" />
-                  <strong className="block text-ledger-ink font-semibold text-sm">No transactions logged today</strong>
+                <div className="py-16 px-6 text-center space-y-3 text-slate-400">
+                  <Banknote className="w-7 h-7 mx-auto text-slate-300 bg-slate-50 p-1.5 rounded-full" />
+                  <strong className="block text-slate-800 font-bold text-sm">No transactions logged today</strong>
                   <p className="text-xs">Use the quick entry command bar above to record your first ledger item.</p>
                 </div>
               )}
@@ -777,51 +764,51 @@ export default function TodayPage() {
           </div>
         </section>
 
-        {/* Right Column (Desk Status Panel) */}
+        {/* Right Grid Content */}
         <section className="space-y-6">
-          <div className="border-b border-ledger-border pb-1.5">
-            <h2 className="text-xs font-bold uppercase tracking-wider text-ledger-ink flex items-center gap-1.5">
-              <Clock className="w-3.5 h-3.5 text-ledger-blue" />
-              Operator Workspace
+          <div className="border-b border-slate-200/80 pb-1.5">
+            <h2 className="text-xs font-bold uppercase tracking-wider text-slate-900 flex items-center gap-1.5">
+              <Clock className="w-3.5 h-3.5 text-slate-500" />
+              Desk Status
             </h2>
           </div>
 
-          <div className="ledger-card border-ledger-border p-5 space-y-5 bg-white shadow-xs">
-            <header className="border-b border-ledger-border/40 pb-3">
-              <span className="text-[10px] uppercase font-bold text-ledger-muted block">System Date</span>
-              <strong className="text-lg font-extrabold text-ledger-ink tracking-tight block mt-0.5">
+          <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-4.5 shadow-xs">
+            <header className="border-b border-slate-100 pb-3">
+              <span className="text-[10px] uppercase font-bold text-slate-400 block">System Date</span>
+              <strong className="text-base font-bold text-slate-900 block mt-0.5">
                 {todayDate}
               </strong>
             </header>
 
-            <dl className="grid grid-cols-2 gap-y-4 text-xs font-semibold text-ledger-muted">
+            <dl className="grid grid-cols-2 gap-y-4 text-xs font-semibold text-slate-500">
               <div>
-                <dt className="font-medium text-ledger-muted mb-0.5">First entry time</dt>
-                <dd className="text-ledger-ink font-mono font-bold">{firstPaymentTime}</dd>
+                <dt className="font-bold text-slate-400 mb-0.5">First Entry</dt>
+                <dd className="text-slate-800 font-mono font-bold">{firstPaymentTime}</dd>
               </div>
               <div>
-                <dt className="font-medium text-ledger-muted mb-0.5">Latest entry time</dt>
-                <dd className="text-ledger-ink font-mono font-bold">{latestPaymentTime}</dd>
+                <dt className="font-bold text-slate-400 mb-0.5">Latest Entry</dt>
+                <dd className="text-slate-800 font-mono font-bold">{latestPaymentTime}</dd>
               </div>
               <div>
-                <dt className="font-medium text-ledger-muted mb-0.5">Unique payees paid</dt>
-                <dd className="text-ledger-ink font-mono font-bold">{uniquePayees}</dd>
+                <dt className="font-bold text-slate-400 mb-0.5">Payees Paid</dt>
+                <dd className="text-slate-800 font-mono font-bold">{uniquePayees}</dd>
               </div>
               <div>
-                <dt className="font-medium text-ledger-muted mb-0.5">Average payment size</dt>
-                <dd className="text-ledger-ink font-mono font-bold tabular-nums">
+                <dt className="font-bold text-slate-400 mb-0.5">Avg Size</dt>
+                <dd className="text-slate-800 font-mono font-bold tabular-nums">
                   {formatInr(averagePayment)}
                 </dd>
               </div>
             </dl>
 
-            <div className="p-3 bg-ledger-workspace border border-ledger-border rounded-xl space-y-2 text-[11px] text-ledger-muted font-medium">
-              <div className="flex items-center gap-2 text-ledger-ink font-bold">
-                <HelpCircle className="w-4 h-4 text-ledger-blue shrink-0" />
-                <span>Helpful reminders</span>
+            <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-1.5 text-[11px] text-slate-500 font-semibold">
+              <div className="flex items-center gap-1.5 text-slate-800 font-bold">
+                <HelpCircle className="w-4 h-4 text-slate-500 shrink-0" />
+                <span>Helpful Reminders</span>
               </div>
               <p className="leading-relaxed">
-                Voiding and editing actions can be performed securely by clicking on any transaction in the list to reveal the audit drawer.
+                Click on any transaction logged today to show the audit logs drawer and correct or void details.
               </p>
             </div>
           </div>

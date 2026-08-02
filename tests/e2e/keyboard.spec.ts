@@ -8,7 +8,7 @@ test.describe('Keyboard-only Workflows', () => {
 
     // 2. Test chord navigation: Alt + 3 (Review Inbox) or G then R chord
     await page.waitForTimeout(500); // Wait for hydration
-    await page.locator('body').click(); // Ensure browser focus
+    await page.keyboard.press('Escape'); // Ensure any focused input is blurred
     await page.waitForTimeout(100);
     await page.keyboard.press('g');
     await page.waitForTimeout(200);
