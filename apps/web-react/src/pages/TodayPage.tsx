@@ -347,7 +347,7 @@ export default function TodayPage() {
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
-      {/* Clean Light Page Title bar (No large dark header cards!) */}
+      {/* 1. Page Title & Action bar */}
       <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/80 pb-5">
         <div>
           <h1 className="text-xl font-bold tracking-tight text-slate-900 font-sans">
@@ -384,7 +384,215 @@ export default function TodayPage() {
         </div>
       </header>
 
-      {/* Modern Soft Metrics Cards */}
+      {/* 2. Command Entry Box (MOVED TO TOP OF THE PAGE!) */}
+      <div className="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden flex flex-col">
+        <div className="flex items-center h-14 bg-white relative">
+          <span className="w-12 h-full border-r border-slate-100 text-slate-400 flex items-center justify-center text-xl font-bold select-none bg-slate-50/50">
+            ₹
+          </span>
+          <input
+            ref={inputRef}
+            type="text"
+            role="combobox"
+            aria-autocomplete="list"
+            aria-expanded={commandPayeeSuggestions.length > 0}
+            aria-controls="payee-listbox"
+            value={command}
+            onChange={(e) => {
+              setCommand(e.target.value);
+              updatePreview(e.target.value);
+            }}
+            onKeyDown={handleCommandKey}
+            placeholder="Payee, amount, date, method, purpose..."
+            className="flex-1 h-full px-4 text-[15px] font-bold tracking-tight text-slate-800 border-none outline-none focus:ring-0 focus:outline-none"
+            autoComplete="off"
+            autoFocus
+          />
+          <kbd className="mr-4 text-[9px] select-none uppercase font-extrabold text-slate-500 bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded shadow-2xs">
+            Enter
+          </kbd>
+        </div>
+
+        {/* Suggestions drop-down matching aliases */}
+        <AnimatePresence>
+          {commandPayeeSuggestions.length > 0 && suggestionIndex >= 0 && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.15 }}
+              id="payee-listbox"
+              role="listbox"
+              aria-label="Payee matches"
+              className="p-3 border-t border-slate-100 bg-slate-50/40 flex flex-col gap-2 overflow-hidden"
+            >
+              <div className="flex items-center justify-between text-[10px] text-slate-400 font-bold px-1">
+                <span>SUGGESTED ALIAS & NAME MATCHES</span>
+                <span>
+                  Use <kbd className="text-[9px]">↑↓</kbd> or <kbd className="text-[9px]">Tab</kbd> to select
+                </span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                {commandPayeeSuggestions.map((payee, idx) => (
+                  <div
+                    key={payee.id}
+                    role="option"
+                    aria-selected={idx === suggestionIndex}
+                    onClick={() => chooseCommandPayee(payee)}
+                    className={`flex items-center justify-between p-2 rounded-lg border cursor-pointer select-none transition-colors ${
+                      idx === suggestionIndex
+                        ? 'border-ledger-blue bg-white text-ledger-ink shadow-2xs'
+                        : 'border-slate-200 bg-white hover:bg-slate-50/80 text-slate-700'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 overflow-hidden">
+                      <span className="w-6 h-6 rounded bg-slate-100 text-slate-600 flex items-center justify-center font-bold text-[10px] uppercase shrink-0">
+                        {payee.name.slice(0, 2)}
+                      </span>
+                      <div className="truncate text-xs">
+                        <strong className="text-slate-900 block font-bold truncate leading-normal">
+                          {payee.name}
+                        </strong>
+                      </div>
+                    </div>
+                    <ChevronRight className="w-3 h-3 text-slate-400" />
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Validation smart preview panel */}
+        <div
+          className={`px-5 py-3.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-t border-slate-100 ${
+            preview && !preview.valid ? 'bg-red-50/10' : 'bg-slate-50/40'
+          }`}
+        >
+          {preview ? (
+            <div className="flex-1 flex flex-col gap-2">
+              <div className="flex items-center gap-2.5">
+                <span
+                  className={`flex items-center justify-center w-5.5 h-5.5 rounded-full shrink-0 ${
+                    preview.valid ? 'text-emerald-700 bg-emerald-100' : 'text-slate-400 bg-slate-100'
+                  }`}
+                >
+                  {preview.valid ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Search className="w-3.5 h-3.5" />}
+                </span>
+                <div className="text-xs">
+                  <span className="text-slate-400 font-bold block uppercase tracking-wider text-[9px]">Parsed payment</span>
+                  <strong className="text-slate-900 font-bold text-sm block mt-0.5">
+                    {preview.payeeName || 'Choose payee'} ·{' '}
+                    {preview.amountPaise ? formatInr(preview.amountPaise) : 'Amount missing'}
+                  </strong>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[10px] text-slate-500 pl-8 font-semibold">
+                <span className="bg-white border border-slate-200 px-1.5 py-0.5 rounded">
+                  {preview.paymentMethodName || 'Method required'}
+                </span>
+                <span className="bg-white border border-slate-200 px-1.5 py-0.5 rounded">
+                  {preview.categoryName || 'Category required'}
+                </span>
+                <span>
+                  {preview.transactionDate || todayDate || 'Today'} ·{' '}
+                  {preview.transactionTime ? formatTime12(preview.transactionTime) : 'Now'}
+                </span>
+                <span className="truncate max-w-[200px]" title={preview.note ?? ''}>
+                  {preview.note || 'No purpose'}
+                </span>
+              </div>
+
+              {preview.isNewPayee && similarPayees.length > 0 && !newPayeeConfirmed && (
+                <div className="mt-2 p-2.5 bg-amber-50 border border-amber-200 rounded-lg pl-8 text-xs text-amber-900">
+                  <strong className="font-bold block mb-1">Similar payees exist:</strong>
+                  <div className="flex flex-wrap gap-2 mt-1.5">
+                    {similarPayees.map((p) => (
+                      <button
+                        key={p.id}
+                        onClick={() => useSimilarPayee(p.name)}
+                        className="px-2 py-0.5 bg-white border border-amber-300 hover:border-amber-500 rounded text-[11px] text-amber-900 transition-colors cursor-pointer font-semibold"
+                      >
+                        Use {p.name}
+                      </button>
+                    ))}
+                    <button
+                      onClick={() => setNewPayeeConfirmed(true)}
+                      className="px-2 py-0.5 bg-amber-800 text-white rounded text-[11px] hover:bg-amber-900 transition-colors cursor-pointer font-bold"
+                    >
+                      Create “{preview.payeeName}” anyway
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {(preview.errors.length > 0 || preview.warnings.length > 0) && (
+                <p className="text-[10px] text-rose-700 pl-8 mt-1 font-bold">
+                  {[...preview.errors, ...preview.warnings].join(' · ')}
+                </p>
+              )}
+            </div>
+          ) : (
+            <div className="flex-1 flex items-center gap-2.5 text-xs text-slate-500 py-1">
+              <Banknote className="w-4 h-4 text-slate-400 shrink-0" />
+              <div>
+                <span>Type transaction details above to start quick recording.</span>
+              </div>
+            </div>
+          )}
+
+          {preview && (
+            <button
+              onClick={() => void saveSmart()}
+              disabled={
+                !preview.valid ||
+                saving ||
+                (preview.isNewPayee && similarPayees.length > 0 && !newPayeeConfirmed)
+              }
+              className="btn btn-primary text-xs py-2 px-3 shrink-0 flex items-center gap-1 shadow-sm cursor-pointer"
+            >
+              {saving ? 'Saving...' : 'Post outlay'}
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+
+        {/* Quick entry links row */}
+        <div className="px-5 py-3 flex flex-wrap items-center gap-1.5 bg-slate-50/20 border-t border-slate-100 select-none">
+          <span className="text-[11px] font-bold text-slate-400 mr-2 uppercase tracking-wider">Quick payees</span>
+          {master?.payees && master.payees.filter((p) => p.favourite || p.paymentCount > 0).length > 0 ? (
+            master.payees
+              .filter((p) => p.favourite || p.paymentCount > 0)
+              .sort((a, b) => {
+                if (a.favourite && !b.favourite) return -1;
+                if (!a.favourite && b.favourite) return 1;
+                return b.paymentCount - a.paymentCount;
+              })
+              .slice(0, 8)
+              .map((payee) => (
+                <button
+                  key={payee.id}
+                  onClick={() => usePayee(payee.name)}
+                  className={`px-2.5 py-0.5 text-xs font-semibold rounded-md border transition-all duration-100 cursor-pointer ${
+                    payee.favourite
+                      ? 'bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100 hover:border-amber-350 shadow-3xs'
+                      : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50 hover:border-slate-355'
+                  }`}
+                >
+                  {payee.favourite && <span className="text-amber-500 mr-0.5">★</span>}
+                  {payee.name}
+                </button>
+              ))
+          ) : (
+            <span className="text-[11px] text-slate-400 font-semibold">
+              Frequent or favourite payees will appear here as quick entry links.
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* 3. Soft Metrics Cards (Positioned under the entry station!) */}
       <section className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4" aria-label="Workstation totals">
         <article className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs relative overflow-hidden group hover:border-ledger-blue/40 transition-colors">
           <div className="absolute top-0 left-0 w-1 h-full bg-ledger-blue" />
@@ -473,298 +681,87 @@ export default function TodayPage() {
         </article>
       </section>
 
-      {/* Main Content Layout */}
+      {/* 4. Dashboard Table and Stats Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Grid Content */}
-        <section className="lg:col-span-2 space-y-6">
-          {/* Minimal clean Command Console */}
-          <div className="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden flex flex-col">
-            <div className="flex items-center h-14 bg-white relative">
-              <span className="w-12 h-full border-r border-slate-100 text-slate-400 flex items-center justify-center text-xl font-bold select-none bg-slate-50/50">
-                ₹
-              </span>
-              <input
-                ref={inputRef}
-                type="text"
-                role="combobox"
-                aria-autocomplete="list"
-                aria-expanded={commandPayeeSuggestions.length > 0}
-                aria-controls="payee-listbox"
-                value={command}
-                onChange={(e) => {
-                  setCommand(e.target.value);
-                  updatePreview(e.target.value);
-                }}
-                onKeyDown={handleCommandKey}
-                placeholder="Payee, amount, date, method, purpose..."
-                className="flex-1 h-full px-4 text-[15px] font-bold tracking-tight text-slate-800 border-none outline-none focus:ring-0 focus:outline-none"
-                autoComplete="off"
-                autoFocus
-              />
-              <kbd className="mr-4 text-[9px] select-none uppercase font-extrabold text-slate-500 bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded shadow-2xs">
-                Enter
-              </kbd>
-            </div>
-
-            {/* Suggestions drop-down matching aliases */}
-            <AnimatePresence>
-              {commandPayeeSuggestions.length > 0 && suggestionIndex >= 0 && (
-                <motion.div
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: 'auto', opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  transition={{ duration: 0.15 }}
-                  id="payee-listbox"
-                  role="listbox"
-                  aria-label="Payee matches"
-                  className="p-3 border-t border-slate-100 bg-slate-50/40 flex flex-col gap-2 overflow-hidden"
-                >
-                  <div className="flex items-center justify-between text-[10px] text-slate-400 font-bold px-1">
-                    <span>SUGGESTED ALIAS & NAME MATCHES</span>
-                    <span>
-                      Use <kbd className="text-[9px]">↑↓</kbd> or <kbd className="text-[9px]">Tab</kbd> to select
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-                    {commandPayeeSuggestions.map((payee, idx) => (
-                      <div
-                        key={payee.id}
-                        role="option"
-                        aria-selected={idx === suggestionIndex}
-                        onClick={() => chooseCommandPayee(payee)}
-                        className={`flex items-center justify-between p-2 rounded-lg border cursor-pointer select-none transition-colors ${
-                          idx === suggestionIndex
-                            ? 'border-ledger-blue bg-white text-ledger-ink shadow-2xs'
-                            : 'border-slate-200 bg-white hover:bg-slate-50/80 text-slate-700'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2 overflow-hidden">
-                          <span className="w-6 h-6 rounded bg-slate-100 text-slate-600 flex items-center justify-center font-bold text-[10px] uppercase shrink-0">
-                            {payee.name.slice(0, 2)}
-                          </span>
-                          <div className="truncate text-xs">
-                            <strong className="text-slate-900 block font-bold truncate leading-normal">
-                              {payee.name}
-                            </strong>
-                          </div>
-                        </div>
-                        <ChevronRight className="w-3 h-3 text-slate-400" />
-                      </div>
-                    ))}
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            {/* Validation smart preview panel */}
-            <div
-              className={`px-5 py-3.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-t border-slate-100 ${
-                preview && !preview.valid ? 'bg-red-50/10' : 'bg-slate-50/40'
-              }`}
-            >
-              {preview ? (
-                <div className="flex-1 flex flex-col gap-2">
-                  <div className="flex items-center gap-2.5">
-                    <span
-                      className={`flex items-center justify-center w-5.5 h-5.5 rounded-full shrink-0 ${
-                        preview.valid ? 'text-emerald-700 bg-emerald-100' : 'text-slate-400 bg-slate-100'
-                      }`}
-                    >
-                      {preview.valid ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Search className="w-3.5 h-3.5" />}
-                    </span>
-                    <div className="text-xs">
-                      <span className="text-slate-400 font-bold block uppercase tracking-wider text-[9px]">Parsed payment</span>
-                      <strong className="text-slate-900 font-bold text-sm block mt-0.5">
-                        {preview.payeeName || 'Choose payee'} ·{' '}
-                        {preview.amountPaise ? formatInr(preview.amountPaise) : 'Amount missing'}
-                      </strong>
-                    </div>
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[10px] text-slate-500 pl-8 font-semibold">
-                    <span className="bg-white border border-slate-200 px-1.5 py-0.5 rounded">
-                      {preview.paymentMethodName || 'Method required'}
-                    </span>
-                    <span className="bg-white border border-slate-200 px-1.5 py-0.5 rounded">
-                      {preview.categoryName || 'Category required'}
-                    </span>
-                    <span>
-                      {preview.transactionDate || todayDate || 'Today'} ·{' '}
-                      {preview.transactionTime ? formatTime12(preview.transactionTime) : 'Now'}
-                    </span>
-                    <span className="truncate max-w-[200px]" title={preview.note ?? ''}>
-                      {preview.note || 'No purpose'}
-                    </span>
-                  </div>
-
-                  {preview.isNewPayee && similarPayees.length > 0 && !newPayeeConfirmed && (
-                    <div className="mt-2 p-2.5 bg-amber-50 border border-amber-200 rounded-lg pl-8 text-xs text-amber-900">
-                      <strong className="font-bold block mb-1">Similar payees exist:</strong>
-                      <div className="flex flex-wrap gap-2 mt-1.5">
-                        {similarPayees.map((p) => (
-                          <button
-                            key={p.id}
-                            onClick={() => useSimilarPayee(p.name)}
-                            className="px-2 py-0.5 bg-white border border-amber-300 hover:border-amber-500 rounded text-[11px] text-amber-900 transition-colors cursor-pointer font-semibold"
-                          >
-                            Use {p.name}
-                          </button>
-                        ))}
-                        <button
-                          onClick={() => setNewPayeeConfirmed(true)}
-                          className="px-2 py-0.5 bg-amber-800 text-white rounded text-[11px] hover:bg-amber-900 transition-colors cursor-pointer font-bold"
-                        >
-                          Create “{preview.payeeName}” anyway
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  {(preview.errors.length > 0 || preview.warnings.length > 0) && (
-                    <p className="text-[10px] text-rose-700 pl-8 mt-1 font-bold">
-                      {[...preview.errors, ...preview.warnings].join(' · ')}
-                    </p>
-                  )}
-                </div>
-              ) : (
-                <div className="flex-1 flex items-center gap-2.5 text-xs text-slate-500 py-1">
-                  <Banknote className="w-4 h-4 text-slate-400 shrink-0" />
-                  <div>
-                    <span>Type transaction details above to start quick recording.</span>
-                  </div>
-                </div>
-              )}
-
-              {preview && (
-                <button
-                  onClick={() => void saveSmart()}
-                  disabled={
-                    !preview.valid ||
-                    saving ||
-                    (preview.isNewPayee && similarPayees.length > 0 && !newPayeeConfirmed)
-                  }
-                  className="btn btn-primary text-xs py-2 px-3 shrink-0 flex items-center gap-1 shadow-sm cursor-pointer"
-                >
-                  {saving ? 'Saving...' : 'Post outlay'}
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </button>
-              )}
-            </div>
-
-            {/* Quick entry links row */}
-            <div className="px-5 py-3 flex flex-wrap items-center gap-1.5 bg-slate-50/20 border-t border-slate-100 select-none">
-              <span className="text-[11px] font-bold text-slate-400 mr-2 uppercase tracking-wider">Quick payees</span>
-              {master?.payees && master.payees.filter((p) => p.favourite || p.paymentCount > 0).length > 0 ? (
-                master.payees
-                  .filter((p) => p.favourite || p.paymentCount > 0)
-                  .sort((a, b) => {
-                    if (a.favourite && !b.favourite) return -1;
-                    if (!a.favourite && b.favourite) return 1;
-                    return b.paymentCount - a.paymentCount;
-                  })
-                  .slice(0, 8)
-                  .map((payee) => (
-                    <button
-                      key={payee.id}
-                      onClick={() => usePayee(payee.name)}
-                      className={`px-2.5 py-0.5 text-xs font-semibold rounded-md border transition-all duration-100 cursor-pointer ${
-                        payee.favourite
-                          ? 'bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100 hover:border-amber-350 shadow-3xs'
-                          : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50 hover:border-slate-350'
-                      }`}
-                    >
-                      {payee.favourite && <span className="text-amber-500 mr-0.5">★</span>}
-                      {payee.name}
-                    </button>
-                  ))
-              ) : (
-                <span className="text-[11px] text-slate-400 font-semibold">
-                  Frequent or favourite payees will appear here as quick entry links.
-                </span>
-              )}
-            </div>
+        {/* Left Column (Outlay list) */}
+        <section className="lg:col-span-2 space-y-3">
+          <div className="flex items-center justify-between pb-1">
+            <h2 className="text-xs font-bold uppercase tracking-wider text-slate-900 flex items-center gap-1.5">
+              <Clock className="w-3.5 h-3.5 text-slate-500" />
+              Outlay Ledger
+            </h2>
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider bg-white border border-slate-200 px-2 py-0.5 rounded-md">
+              {todaysItems.length} entries
+            </span>
           </div>
 
-          {/* Recent payments table */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between pb-1">
-              <h2 className="text-xs font-bold uppercase tracking-wider text-slate-900 flex items-center gap-1.5">
-                <Clock className="w-3.5 h-3.5 text-slate-500" />
-                Outlay Ledger
-              </h2>
-              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider bg-white border border-slate-200 px-2 py-0.5 rounded-md">
-                {todaysItems.length} entries
-              </span>
-            </div>
-
-            <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-xs">
-              {todaysItems.length > 0 ? (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse text-xs">
-                    <thead>
-                      <tr className="border-b border-slate-100 bg-slate-50/50 text-slate-500 font-semibold">
-                        <th className="py-2.5 px-4 w-[16%] text-right font-bold">Amount</th>
-                        <th className="py-2.5 px-4 w-[28%] font-bold">Payee</th>
-                        <th className="py-2.5 px-4 w-[22%] font-bold">Category</th>
-                        <th className="py-2.5 px-4 w-[12%] font-bold">Method</th>
-                        <th className="py-2.5 px-4 w-[22%] font-bold">Purpose</th>
-                        <th className="py-2.5 px-4 text-right font-bold">Status</th>
+          <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-xs">
+            {todaysItems.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="border-b border-slate-100 bg-slate-50/50 text-slate-500 font-semibold">
+                      <th className="py-2.5 px-4 w-[16%] text-right font-bold">Amount</th>
+                      <th className="py-2.5 px-4 w-[28%] font-bold">Payee</th>
+                      <th className="py-2.5 px-4 w-[22%] font-bold">Category</th>
+                      <th className="py-2.5 px-4 w-[12%] font-bold">Method</th>
+                      <th className="py-2.5 px-4 w-[22%] font-bold">Purpose</th>
+                      <th className="py-2.5 px-4 text-right font-bold">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {todaysItems.map((item) => (
+                      <tr
+                        key={item.id}
+                        onClick={() => setSelectedTransaction(item)}
+                        className="hover:bg-slate-50/80 cursor-pointer transition-colors group"
+                      >
+                        <td className="py-3 px-4 text-right font-mono font-bold text-slate-950 group-hover:text-ledger-blue tabular-nums">
+                          {formatInr(item.amountPaise)}
+                        </td>
+                        <td className="py-3 px-4 font-bold text-slate-900">
+                          {item.payeeName}
+                        </td>
+                        <td className="py-3 px-4 text-slate-600 font-semibold">
+                          {item.categoryName || (
+                            <span className="text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 text-[10px]">
+                              Review required
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4 text-slate-500 font-semibold uppercase font-mono text-[10px]">
+                          {item.paymentMethodCode}
+                        </td>
+                        <td className="py-3 px-4 text-slate-500 font-medium truncate max-w-[150px]">
+                          {item.note || '—'}
+                        </td>
+                        <td className="py-3 px-4 text-right">
+                          {item.needsReview ? (
+                            <span className="px-2 py-0.5 text-[9px] font-bold bg-amber-50 text-amber-700 rounded-full border border-amber-200">
+                              Review
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 text-[9px] font-bold bg-slate-100 text-slate-700 rounded-full border border-slate-200">
+                              Posted
+                            </span>
+                          )}
+                        </td>
                       </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {todaysItems.map((item) => (
-                        <tr
-                          key={item.id}
-                          onClick={() => setSelectedTransaction(item)}
-                          className="hover:bg-slate-50/80 cursor-pointer transition-colors group"
-                        >
-                          <td className="py-3 px-4 text-right font-mono font-bold text-slate-950 group-hover:text-ledger-blue tabular-nums">
-                            {formatInr(item.amountPaise)}
-                          </td>
-                          <td className="py-3 px-4 font-bold text-slate-900">
-                            {item.payeeName}
-                          </td>
-                          <td className="py-3 px-4 text-slate-600 font-semibold">
-                            {item.categoryName || (
-                              <span className="text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 text-[10px]">
-                                Review required
-                              </span>
-                            )}
-                          </td>
-                          <td className="py-3 px-4 text-slate-500 font-semibold uppercase font-mono text-[10px]">
-                            {item.paymentMethodCode}
-                          </td>
-                          <td className="py-3 px-4 text-slate-500 font-medium truncate max-w-[150px]">
-                            {item.note || '—'}
-                          </td>
-                          <td className="py-3 px-4 text-right">
-                            {item.needsReview ? (
-                              <span className="px-2 py-0.5 text-[9px] font-bold bg-amber-50 text-amber-700 rounded-full border border-amber-200">
-                                Review
-                              </span>
-                            ) : (
-                              <span className="px-2 py-0.5 text-[9px] font-bold bg-slate-100 text-slate-700 rounded-full border border-slate-200">
-                                Posted
-                              </span>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <div className="py-16 px-6 text-center space-y-3 text-slate-400">
-                  <Banknote className="w-7 h-7 mx-auto text-slate-300 bg-slate-50 p-1.5 rounded-full" />
-                  <strong className="block text-slate-800 font-bold text-sm">No transactions logged today</strong>
-                  <p className="text-xs">Use the quick entry command bar above to record your first ledger item.</p>
-                </div>
-              )}
-            </div>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="py-16 px-6 text-center space-y-3 text-slate-400">
+                <Banknote className="w-7 h-7 mx-auto text-slate-300 bg-slate-50 p-1.5 rounded-full" />
+                <strong className="block text-slate-800 font-bold text-sm">No transactions logged today</strong>
+                <p className="text-xs">Use the quick entry command bar above to record your first ledger item.</p>
+              </div>
+            )}
           </div>
         </section>
 
-        {/* Right Grid Content */}
+        {/* Right Column (Desk Status) */}
         <section className="space-y-6">
           <div className="border-b border-slate-200/80 pb-1.5">
             <h2 className="text-xs font-bold uppercase tracking-wider text-slate-900 flex items-center gap-1.5">
