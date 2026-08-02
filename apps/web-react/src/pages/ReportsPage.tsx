@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { api, formatInr, queryString } from '../api/client';
-import { Download, RefreshCw, AlertTriangle, Sparkles, TrendingUp, BarChart3, Receipt } from 'lucide-react';
+import { api, formatInr, post, queryString } from '../api/client';
+import { Download, RefreshCw, Calendar, Sparkles, TrendingUp, AlertTriangle, Layers } from 'lucide-react';
 import { toast } from 'sonner';
 import { TransactionDrawer } from '../components/common/TransactionDrawer';
 
@@ -102,158 +102,154 @@ export default function ReportsPage() {
   const maxMethodPaise = data?.methods?.[0]?.totalPaise || 1;
 
   return (
-    <div className="space-y-8">
-      {/* 1. Page Title Header */}
-      <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-stone-200/40 pb-6">
+    <div className="space-y-6">
+      {/* Title & Actions */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold tracking-tight text-stone-900 font-sans">
-            Reports & Analytics
-          </h2>
-          <p className="text-xs text-stone-500 mt-1 font-medium">Spending trends, category breakdowns, and audit insights.</p>
+          <h1 className="text-2xl font-bold text-[#111827]">Reports</h1>
+          <p className="mt-1 text-sm text-[#667085]">Spending trends and breakdowns.</p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
           <button
             onClick={handleRefresh}
-            className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-stone-600 hover:text-stone-900 hover:bg-stone-100/60 border border-stone-200 rounded-lg transition-all duration-150 cursor-pointer bg-white"
+            className="btn btn-secondary h-10 px-3 text-[#667085] hover:text-[#111827]"
             title="Refresh reports"
           >
-            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+            <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
           </button>
 
           <button
             onClick={handleExportCsv}
-            className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-stone-600 hover:text-stone-900 hover:bg-stone-100/60 border border-stone-200 rounded-lg transition-all duration-150 cursor-pointer bg-white"
+            className="btn btn-secondary h-10 px-4 gap-2 text-slate-700"
           >
-            <Download size={14} />
+            <Download size={16} />
             <span>Export CSV</span>
           </button>
         </div>
-      </header>
+      </div>
 
       {/* Date Range Selector Bar */}
-      <div className="bg-white p-4 rounded-xl shadow-[0_1px_2px_rgba(0,0,0,0.04),0_1px_8px_rgba(0,0,0,0.03)] border border-[#E5E7EB]/50 flex flex-col md:flex-row items-center justify-between gap-4 select-none">
-        <div className="flex items-center gap-3">
-          <span className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">Presets</span>
+      <div className="ledger-card p-4 bg-white border border-[#DDE3EC] rounded-2xl shadow-xs flex flex-col md:flex-row items-center justify-between gap-4">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-bold text-[#667085] uppercase tracking-wider">RANGE PRESETS:</span>
           <div className="flex items-center gap-1.5">
             <button
               onClick={() => setRangePreset('month')}
-              className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-stone-100 hover:bg-blue-50 hover:text-[#2563EB] text-stone-600 transition-colors border-none cursor-pointer"
+              className="px-3 py-1 text-xs font-semibold rounded-lg bg-slate-100 text-slate-800 hover:bg-[#E9F1FF] hover:text-[#165DFF]"
             >
               This Month
             </button>
             <button
               onClick={() => setRangePreset(30)}
-              className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-stone-100 hover:bg-blue-50 hover:text-[#2563EB] text-stone-600 transition-colors border-none cursor-pointer"
+              className="px-3 py-1 text-xs font-semibold rounded-lg bg-slate-100 text-slate-800 hover:bg-[#E9F1FF] hover:text-[#165DFF]"
             >
               Last 30 Days
             </button>
             <button
               onClick={() => setRangePreset('six-months')}
-              className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-stone-100 hover:bg-blue-50 hover:text-[#2563EB] text-stone-600 transition-colors border-none cursor-pointer"
+              className="px-3 py-1 text-xs font-semibold rounded-lg bg-slate-100 text-slate-800 hover:bg-[#E9F1FF] hover:text-[#165DFF]"
             >
               Last 6 Months
             </button>
           </div>
         </div>
 
-        <div className="flex items-center gap-2.5 w-full md:w-auto">
+        <div className="flex items-center gap-2 w-full md:w-auto">
           <input
             type="date"
             value={from}
             onChange={(e) => setFrom(e.target.value)}
-            className="h-9 px-3 text-xs font-semibold rounded-lg border border-stone-200 bg-white text-stone-900 outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all w-36"
+            className="form-input text-xs w-36"
           />
-          <span className="text-[10px] font-bold text-stone-400 uppercase">TO</span>
+          <span className="text-xs font-bold text-[#667085]">TO</span>
           <input
             type="date"
             value={to}
             onChange={(e) => setTo(e.target.value)}
-            className="h-9 px-3 text-xs font-semibold rounded-lg border border-stone-200 bg-white text-stone-900 outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all w-36"
+            className="form-input text-xs w-36"
           />
         </div>
       </div>
 
-      {/* Hero Stat Grid */}
-      <section className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        {/* TOTAL OUTGOING Hero Stat Card */}
-        <article className="md:col-span-2 bg-white rounded-xl p-6 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_1px_8px_rgba(0,0,0,0.03)] border border-stone-100/40 relative overflow-hidden transition-all duration-200 hover:shadow-md flex flex-col justify-between min-h-[140px]">
-          <div className="flex items-start justify-between">
-            <div className="space-y-1">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-stone-400">Total Outgoing</span>
-              <strong className="text-3xl font-mono text-stone-900 tracking-tight block py-1.5 tabular-nums">
-                {formatInr(totals.totalPaise)}
-              </strong>
-            </div>
-            <span className="w-10 h-10 rounded-full bg-blue-50 text-[#2563EB] flex items-center justify-center shrink-0">
-              <TrendingUp className="w-5 h-5" />
+      {/* Hero Stat Grid (Section 4.5 Spec) */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
+        {/* TOTAL OUTGOING Hero Stat Card (32px number, red top border) */}
+        <div className="md:col-span-2 ledger-card border-t-2 border-t-[#FF2638] bg-white p-6 flex flex-col justify-between shadow-xs">
+          <div>
+            <span className="text-xs font-bold uppercase tracking-wider text-[#667085]">
+              TOTAL OUTGOING ({from} TO {to})
             </span>
+            <div className="mt-2 flex items-baseline gap-3">
+              <span className="text-3xl md:text-4xl font-black tabular-nums text-[#111827]">
+                {formatInr(totals.totalPaise)}
+              </span>
+              <span className="text-xs font-semibold text-[#667085]">
+                across {totals.paymentCount} payments
+              </span>
+            </div>
           </div>
 
-          <div className="flex items-center justify-between border-t border-stone-100/60 pt-3.5 mt-3 text-[10px] text-stone-500 font-semibold">
-            <span>Active Days: <strong className="text-stone-900">{totals.activeDayCount}</strong></span>
-            <span>Unique Payees: <strong className="text-stone-900">{totals.payeeCount}</strong></span>
+          <div className="mt-4 pt-4 border-t border-[#DDE3EC] flex items-center justify-between text-xs text-[#667085]">
+            <span>Active Days: <strong className="text-[#111827]">{totals.activeDayCount}</strong></span>
+            <span>Unique Payees: <strong className="text-[#111827]">{totals.payeeCount}</strong></span>
           </div>
-        </article>
+        </div>
 
         {/* Avg Transaction Stat */}
-        <article className="bg-white rounded-xl p-6 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_1px_8px_rgba(0,0,0,0.03)] border border-stone-100/40 relative overflow-hidden transition-all duration-200 hover:shadow-md flex flex-col justify-between min-h-[140px]">
-          <div className="flex items-start justify-between">
-            <div className="space-y-1">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-stone-400">Avg Payment Size</span>
-              <strong className="text-2xl font-mono text-stone-900 tracking-tight block py-1.5 tabular-nums">
-                {formatInr(totals.averageTransactionPaise)}
-              </strong>
-            </div>
-            <span className="w-10 h-10 rounded-full bg-purple-50 text-purple-600 flex items-center justify-center shrink-0">
-              <Receipt className="w-5 h-5" />
+        <div className="ledger-card bg-white p-6 flex flex-col justify-between shadow-xs">
+          <div>
+            <span className="text-xs font-bold uppercase tracking-wider text-[#667085]">
+              AVG PAYMENT SIZE
             </span>
+            <div className="mt-2">
+              <span className="text-2xl font-bold tabular-nums text-[#111827]">
+                {formatInr(totals.averageTransactionPaise)}
+              </span>
+            </div>
           </div>
-          <p className="text-[10px] text-stone-450 mt-3 font-semibold">Per single ledger entry</p>
-        </article>
+          <p className="text-xs text-[#667085] mt-3">Per single ledger entry</p>
+        </div>
 
         {/* Total Payments Count */}
-        <article className="bg-white rounded-xl p-6 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_1px_8px_rgba(0,0,0,0.03)] border border-stone-100/40 relative overflow-hidden transition-all duration-200 hover:shadow-md flex flex-col justify-between min-h-[140px]">
-          <div className="flex items-start justify-between">
-            <div className="space-y-1">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-stone-400">Payment Count</span>
-              <strong className="text-2xl font-mono text-stone-900 tracking-tight block py-1.5 tabular-nums">
-                {totals.paymentCount}
-              </strong>
-            </div>
-            <span className="w-10 h-10 rounded-full bg-amber-50 text-[#F79009] flex items-center justify-center shrink-0">
-              <BarChart3 className="w-5 h-5" />
+        <div className="ledger-card bg-white p-6 flex flex-col justify-between shadow-xs">
+          <div>
+            <span className="text-xs font-bold uppercase tracking-wider text-[#667085]">
+              PAYMENT COUNT
             </span>
+            <div className="mt-2">
+              <span className="text-2xl font-bold tabular-nums text-[#111827]">
+                {totals.paymentCount}
+              </span>
+            </div>
           </div>
-          <p className="text-[10px] text-stone-450 mt-3 font-semibold">Recorded entries in period</p>
-        </article>
-      </section>
+          <p className="text-xs text-[#667085] mt-3">Recorded entries in period</p>
+        </div>
+      </div>
 
       {/* Interactive ECharts Visual Breakdown */}
       {data && (
-        <section className="bg-white rounded-xl p-6 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_1px_8px_rgba(0,0,0,0.03)] border border-[#E5E7EB]/50 overflow-hidden">
-          <React.Suspense fallback={<div className="h-64 bg-stone-50/50 rounded-lg animate-pulse" />}>
-            <ReportCharts daily={data.daily} categories={data.categories} />
-          </React.Suspense>
-        </section>
+        <React.Suspense fallback={<div className="h-64 bg-white rounded-2xl animate-pulse" />}>
+          <ReportCharts daily={data.daily} categories={data.categories} />
+        </React.Suspense>
       )}
 
       {/* Proportional Bars Breakdown for Categories & Methods */}
-      <section className="grid grid-cols-1 md:grid-cols-2 gap-6" aria-label="Breakdowns">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Categories Proportional Bars */}
-        <div className="bg-white p-6 rounded-xl shadow-[0_1px_2px_rgba(0,0,0,0.04),0_1px_8px_rgba(0,0,0,0.03)] border border-stone-100/50 space-y-5">
-          <h3 className="text-xs font-bold uppercase tracking-wider text-stone-900">Category Performance</h3>
-          <div className="space-y-3.5">
+        <div className="ledger-card bg-white p-6 border border-[#DDE3EC] rounded-2xl shadow-xs space-y-4">
+          <h3 className="text-base font-bold text-[#111827]">Category Performance</h3>
+          <div className="space-y-3">
             {data?.categories.slice(0, 6).map((cat, idx) => {
               const pct = Math.round((cat.totalPaise / maxCategoryPaise) * 100);
               return (
-                <div key={idx} className="space-y-1.5">
+                <div key={idx} className="space-y-1">
                   <div className="flex items-center justify-between text-xs font-semibold">
-                    <span className="text-stone-850">{cat.label}</span>
-                    <span className="tabular-nums font-bold text-stone-900">{formatInr(cat.totalPaise)}</span>
+                    <span className="text-[#111827]">{cat.label}</span>
+                    <span className="tabular-nums font-bold text-[#111827]">{formatInr(cat.totalPaise)}</span>
                   </div>
-                  <div className="w-full bg-stone-100 h-1.5 rounded-full overflow-hidden">
-                    <div className="bg-[#2563EB] h-full rounded-full transition-all duration-300" style={{ width: `${pct}%` }} />
+                  <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                    <div className="bg-[#165DFF] h-full rounded-full" style={{ width: `${pct}%` }} />
                   </div>
                 </div>
               );
@@ -262,53 +258,51 @@ export default function ReportsPage() {
         </div>
 
         {/* Methods Proportional Bars */}
-        <div className="bg-white p-6 rounded-xl shadow-[0_1px_2px_rgba(0,0,0,0.04),0_1px_8px_rgba(0,0,0,0.03)] border border-stone-100/50 space-y-5">
-          <h3 className="text-xs font-bold uppercase tracking-wider text-stone-900">Payment Methods</h3>
-          <div className="space-y-3.5">
+        <div className="ledger-card bg-white p-6 border border-[#DDE3EC] rounded-2xl shadow-xs space-y-4">
+          <h3 className="text-base font-bold text-[#111827]">Payment Methods</h3>
+          <div className="space-y-3">
             {data?.methods.map((method, idx) => {
               const pct = Math.round((method.totalPaise / maxMethodPaise) * 100);
               return (
-                <div key={idx} className="space-y-1.5">
+                <div key={idx} className="space-y-1">
                   <div className="flex items-center justify-between text-xs font-semibold">
-                    <span className="text-stone-850">{method.label}</span>
-                    <span className="tabular-nums font-bold text-stone-900">{formatInr(method.totalPaise)}</span>
+                    <span className="text-[#111827]">{method.label}</span>
+                    <span className="tabular-nums font-bold text-[#111827]">{formatInr(method.totalPaise)}</span>
                   </div>
-                  <div className="w-full bg-stone-100 h-1.5 rounded-full overflow-hidden">
-                    <div className="bg-emerald-600 h-full rounded-full transition-all duration-300" style={{ width: `${pct}%` }} />
+                  <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                    <div className="bg-[#00B96B] h-full rounded-full" style={{ width: `${pct}%` }} />
                   </div>
                 </div>
               );
             })}
           </div>
         </div>
-      </section>
+      </div>
 
-      {/* Insights Section */}
-      <section className="grid grid-cols-1 md:grid-cols-2 gap-6" aria-label="Insights & Patterns">
+      {/* Insights Section (Section 4.5 Spec: Amber icon/header treatment for Unusually High & Repeated) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Unusually High Card */}
-        <div className="bg-white p-6 rounded-xl shadow-[0_1px_2px_rgba(0,0,0,0.04),0_1px_8px_rgba(0,0,0,0.03)] border border-stone-100/50 space-y-5">
-          <div className="flex items-center gap-3">
-            <span className="w-8 h-8 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
-              <AlertTriangle size={16} />
-            </span>
-            <h3 className="text-xs font-bold uppercase tracking-wider text-stone-900">Unusually High Transactions</h3>
+        <div className="ledger-card bg-white p-6 border-t-2 border-t-[#F79009] border-[#DDE3EC] rounded-2xl shadow-xs space-y-4">
+          <div className="flex items-center gap-2 text-[#F79009]">
+            <AlertTriangle size={20} />
+            <h3 className="text-base font-bold text-[#111827]">Unusually High Transactions</h3>
           </div>
 
-          <div className="space-y-3 select-none">
+          <div className="space-y-3">
             {!data?.unusual || data.unusual.length === 0 ? (
-              <p className="text-xs text-stone-500 font-medium">No unusual payment anomalies detected in this period.</p>
+              <p className="text-xs text-[#667085]">No unusual payment anomalies detected in this period.</p>
             ) : (
               data.unusual.map((item) => (
                 <div
                   key={item.id}
                   onClick={() => setSelectedTx(item)}
-                  className="p-3 bg-stone-50/50 border border-stone-100 rounded-lg flex items-center justify-between cursor-pointer hover:bg-stone-100/40 transition-colors duration-150"
+                  className="p-3 bg-amber-50/50 border border-amber-200/60 rounded-xl flex items-center justify-between cursor-pointer hover:bg-amber-100/50 transition-colors"
                 >
                   <div>
-                    <span className="font-bold text-xs text-stone-900 block leading-tight">{item.payeeName}</span>
-                    <span className="text-[10px] text-stone-400 font-semibold block mt-0.5">{item.transactionDate}</span>
+                    <span className="font-bold text-sm text-[#111827] block">{item.payeeName}</span>
+                    <span className="text-xs text-[#667085]">{item.transactionDate}</span>
                   </div>
-                  <span className="tabular-nums font-black text-rose-600 text-sm">
+                  <span className="tabular-nums font-black text-rose-600 text-base">
                     {formatInr(item.amountPaise)}
                   </span>
                 </div>
@@ -318,25 +312,23 @@ export default function ReportsPage() {
         </div>
 
         {/* Repeated Amounts Card */}
-        <div className="bg-white p-6 rounded-xl shadow-[0_1px_2px_rgba(0,0,0,0.04),0_1px_8px_rgba(0,0,0,0.03)] border border-stone-100/50 space-y-5">
-          <div className="flex items-center gap-3">
-            <span className="w-8 h-8 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
-              <Sparkles size={16} />
-            </span>
-            <h3 className="text-xs font-bold uppercase tracking-wider text-stone-900">Repeated Amount Patterns</h3>
+        <div className="ledger-card bg-white p-6 border-t-2 border-t-[#F79009] border-[#DDE3EC] rounded-2xl shadow-xs space-y-4">
+          <div className="flex items-center gap-2 text-[#F79009]">
+            <Sparkles size={20} />
+            <h3 className="text-base font-bold text-[#111827]">Repeated Amount Patterns</h3>
           </div>
 
-          <div className="space-y-3 select-none">
+          <div className="space-y-3">
             {!data?.repeated || data.repeated.length === 0 ? (
-              <p className="text-xs text-stone-500 font-medium">No repeated payment patterns detected.</p>
+              <p className="text-xs text-[#667085]">No repeated payment patterns detected.</p>
             ) : (
               data.repeated.slice(0, 4).map((item, idx) => (
-                <div key={idx} className="p-3 bg-stone-50/50 border border-stone-100 rounded-lg flex items-center justify-between">
+                <div key={idx} className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between">
                   <div>
-                    <span className="font-bold text-xs text-stone-900 block leading-tight">{item.payeeName}</span>
-                    <span className="text-[10px] text-stone-450 font-semibold block mt-0.5">Repeated {item.occurrences} times</span>
+                    <span className="font-bold text-sm text-[#111827] block">{item.payeeName}</span>
+                    <span className="text-xs text-[#667085]">Repeated {item.occurrences} times</span>
                   </div>
-                  <span className="tabular-nums font-bold text-stone-950 text-sm">
+                  <span className="tabular-nums font-bold text-[#111827]">
                     {formatInr(item.amountPaise)}
                   </span>
                 </div>
@@ -344,15 +336,12 @@ export default function ReportsPage() {
             )}
           </div>
         </div>
-      </section>
+      </div>
 
-      {/* Transaction drawer details modal */}
-      {selectedTx && (
-        <TransactionDrawer
-          transaction={selectedTx}
-          onClose={() => setSelectedTx(null)}
-        />
-      )}
+      <TransactionDrawer
+        transaction={selectedTx}
+        onClose={() => setSelectedTx(null)}
+      />
     </div>
   );
 }

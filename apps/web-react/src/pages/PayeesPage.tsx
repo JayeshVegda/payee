@@ -1,20 +1,24 @@
-import React, { useState, useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useParams, useNavigate, useLocation } from 'react-router';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   api,
   post,
   patch,
   formatInr,
   MasterData,
-  Payee
+  Payee,
+  Category,
+  PaymentMethod
 } from '../api/client';
-import { Star, Plus, Edit, Building2, User, Search, Inbox, X } from 'lucide-react';
+import { Star, Plus, Edit, Building2, User, Search, Check, Inbox } from 'lucide-react';
 import { toast } from 'sonner';
 import { PayeeAvatar } from '../components/common/PayeeAvatar';
 import { PayeeDrawer } from '../components/common/PayeeDrawer';
 import { SegmentedTabs } from '../components/common/SegmentedTabs';
 
 export default function PayeesPage() {
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<'payees' | 'categories' | 'methods'>('payees');
   const [search, setSearch] = useState('');
   const [selectedPayee, setSelectedPayee] = useState<Payee | null>(null);
@@ -118,30 +122,27 @@ export default function PayeesPage() {
   ];
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       {/* Title & Primary Action */}
-      <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-stone-200/40 pb-6">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="sr-only">Master Registers</h1>
-          <h2 className="text-2xl font-bold tracking-tight text-stone-900 font-sans">
-            Payees
-          </h2>
-          <p className="text-xs text-stone-500 mt-1 font-medium">People and companies you distribute payments to.</p>
+          <h1 className="text-2xl font-bold text-[#111827]">Payees</h1>
+          <p className="mt-1 text-sm text-[#667085]">People and companies you pay.</p>
         </div>
 
         <div className="flex items-center gap-3">
           <button
             onClick={openAddModal}
-            className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold bg-[#2563EB] hover:bg-[#1D4ED8] text-white rounded-lg shadow-sm hover:shadow transition-all duration-150 cursor-pointer border-none"
+            className="btn btn-primary h-10 px-4 gap-2 shadow-xs"
           >
-            <Plus size={16} />
+            <Plus size={18} />
             <span>Add Payee</span>
           </button>
         </div>
-      </header>
+      </div>
 
       {/* Segmented Control Tabs */}
-      <div className="flex items-center justify-between gap-4 flex-wrap select-none">
+      <div className="flex items-center justify-between gap-4 flex-wrap">
         <SegmentedTabs
           options={tabs}
           activeId={activeTab}
@@ -151,9 +152,9 @@ export default function PayeesPage() {
 
       {/* Search Input */}
       {activeTab === 'payees' && (
-        <div className="bg-white p-4 rounded-xl shadow-[0_1px_2px_rgba(0,0,0,0.04),0_1px_8px_rgba(0,0,0,0.03)] border border-[#E5E7EB]/50">
+        <div className="ledger-card p-4 bg-white border border-[#DDE3EC] rounded-2xl shadow-xs">
           <div className="relative w-full max-w-md">
-            <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400" />
+            <Search size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#667085]" />
             <input
               type="text"
               name="payee-search"
@@ -162,7 +163,7 @@ export default function PayeesPage() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Filter payees by name or alias…"
-              className="w-full h-10 pl-10 pr-4 text-xs font-semibold rounded-lg border border-stone-200 bg-white text-stone-900 outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all placeholder:text-stone-400 placeholder:font-normal"
+              className="form-input pl-10"
             />
           </div>
         </div>
@@ -170,10 +171,10 @@ export default function PayeesPage() {
 
       {/* Main Content View */}
       {activeTab === 'payees' && (
-        <div className="bg-white rounded-xl shadow-[0_1px_2px_rgba(0,0,0,0.04),0_1px_8px_rgba(0,0,0,0.03)] border border-[#E5E7EB]/50 overflow-hidden">
+        <div className="ledger-card bg-white p-0 border border-[#DDE3EC] rounded-2xl shadow-xs overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
-              <thead className="bg-stone-50/70 border-b border-[#E5E7EB]/80 text-[10px] uppercase font-bold tracking-wider text-stone-400 h-11 select-none">
+              <thead className="bg-[#F6F8FC] border-b border-[#DDE3EC] text-xs uppercase font-bold text-[#667085]">
                 <tr>
                   <th className="py-3.5 px-5 w-12 text-center">Fav</th>
                   <th className="py-3.5 px-5">Payee Name</th>
@@ -183,13 +184,13 @@ export default function PayeesPage() {
                   <th className="py-3.5 px-5 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-stone-100/50">
+              <tbody className="divide-y divide-[#DDE3EC]">
                 {sortedPayees.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="py-20 text-center text-stone-400">
+                    <td colSpan={6} className="py-12 text-center text-[#667085]">
                       <Inbox size={32} className="mx-auto mb-2 opacity-50" />
-                      <p className="font-semibold text-sm text-stone-850">No payees found</p>
-                      <p className="text-xs text-stone-500 mt-1">Add a new payee to start tracking payments.</p>
+                      <p className="font-semibold text-base">No payees found</p>
+                      <p className="text-xs mt-1">Add a new payee to start tracking payments.</p>
                     </td>
                   </tr>
                 ) : (
@@ -204,21 +205,21 @@ export default function PayeesPage() {
                         }
                       }}
                       tabIndex={0}
-                      className="clickable-table-row hover:bg-stone-50/40 transition-colors duration-150 h-14 outline-none"
+                      className="clickable-table-row hover:bg-[#F6F8FC] transition-colors"
                     >
                       {/* Favourite Star Toggle */}
                       <td className="py-3.5 px-5 text-center">
                         <button
                           onClick={(e) => toggleFavorite(e, payee)}
                           aria-label={`${payee.favourite ? 'Remove' : 'Add'} ${payee.name} ${payee.favourite ? 'from' : 'to'} favourites`}
-                          className="p-1 hover:scale-110 transition-transform cursor-pointer border-none bg-transparent"
+                          className="p-1 hover:scale-110 transition-transform cursor-pointer"
                         >
                           <Star
-                            size={16}
+                            size={18}
                             className={
                               payee.favourite
                                 ? 'text-amber-500 fill-amber-500'
-                                : 'text-stone-300 hover:text-amber-400'
+                                : 'text-slate-300 hover:text-amber-400'
                             }
                           />
                         </button>
@@ -227,11 +228,11 @@ export default function PayeesPage() {
                       {/* Payee Name with Initial Avatar */}
                       <td className="py-3.5 px-5">
                         <div className="flex items-center gap-3">
-                          <PayeeAvatar name={payee.name} size={30} />
+                          <PayeeAvatar name={payee.name} size={34} />
                           <div>
-                            <span className="font-bold text-stone-900 block text-sm">{payee.name}</span>
+                            <span className="font-bold text-[#111827] block text-base">{payee.name}</span>
                             {payee.aliases && payee.aliases.length > 0 && (
-                              <span className="text-[10px] font-semibold text-stone-400 truncate max-w-[250px] block mt-0.5">
+                              <span className="text-xs text-[#667085] truncate max-w-[250px] block">
                                 {payee.aliases.join(', ')}
                               </span>
                             )}
@@ -239,26 +240,26 @@ export default function PayeesPage() {
                         </div>
                       </td>
 
-                      {/* Type Outlined Pill */}
-                      <td className="py-3.5 px-5 select-none">
+                      {/* Type Outlined Pill (Company = Blue outline, Person = Gray outline) */}
+                      <td className="py-3.5 px-5">
                         {payee.type === 'company' ? (
-                          <span className="px-2.5 py-0.5 text-[9px] font-bold uppercase rounded border border-blue-200 text-blue-800 bg-blue-50/50 inline-flex items-center gap-1">
-                            <Building2 size={10} /> Company
+                          <span className="px-2.5 py-1 text-xs font-semibold rounded-full border border-[#165DFF]/40 text-[#165DFF] bg-[#E9F1FF]/50 inline-flex items-center gap-1">
+                            <Building2 size={12} /> Company
                           </span>
                         ) : (
-                          <span className="px-2.5 py-0.5 text-[9px] font-bold uppercase rounded border border-stone-200 text-stone-700 bg-stone-50 inline-flex items-center gap-1">
-                            <User size={10} /> Person
+                          <span className="px-2.5 py-1 text-xs font-semibold rounded-full border border-slate-300 text-slate-700 bg-slate-50 inline-flex items-center gap-1">
+                            <User size={12} /> Person
                           </span>
                         )}
                       </td>
 
                       {/* Payment Count */}
-                      <td className="py-3.5 px-5 text-center font-bold text-stone-900">
+                      <td className="py-3.5 px-5 text-center font-semibold text-[#111827]">
                         {payee.paymentCount}
                       </td>
 
-                      {/* Total Spent Column */}
-                      <td className="py-3.5 px-5 text-right font-black tabular-nums text-stone-950 text-base">
+                      {/* Total Spent Column (Right-aligned 600 weight Tabular Nums) */}
+                      <td className="py-3.5 px-5 text-right font-bold tabular-nums text-[#111827] text-base">
                         {formatInr(payee.totalPaidPaise)}
                       </td>
 
@@ -267,9 +268,9 @@ export default function PayeesPage() {
                         <button
                           onClick={(e) => openEditModal(e, payee)}
                           aria-label={`Edit ${payee.name}`}
-                          className="p-1.5 text-stone-400 hover:text-[#2563EB] hover:bg-blue-50/80 rounded-lg transition-colors border-none bg-transparent cursor-pointer"
+                          className="p-1.5 text-[#667085] hover:text-[#165DFF] hover:bg-[#E9F1FF] rounded-lg transition-colors"
                         >
-                          <Edit size={14} />
+                          <Edit size={16} />
                         </button>
                       </td>
                     </tr>
@@ -283,14 +284,14 @@ export default function PayeesPage() {
 
       {/* Categories View */}
       {activeTab === 'categories' && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {categories.map((cat) => (
-            <div key={cat.id} className="bg-white p-5 rounded-xl border border-stone-100/60 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_1px_8px_rgba(0,0,0,0.03)] flex items-center justify-between">
+            <div key={cat.id} className="ledger-card bg-white p-4 border border-[#DDE3EC] rounded-xl flex items-center justify-between shadow-xs">
               <div>
-                <span className="font-bold text-stone-900 block text-sm">{cat.name}</span>
-                <span className="text-[10px] text-stone-400 mt-1 block font-semibold uppercase">Sort Order: {cat.sortOrder}</span>
+                <span className="font-bold text-[#111827] block">{cat.name}</span>
+                <span className="text-xs text-[#667085]">Sort Order: {cat.sortOrder}</span>
               </div>
-              <span className="px-2.5 py-0.5 text-[10px] font-bold uppercase border border-emerald-250 text-emerald-800 bg-emerald-50 rounded-full">
+              <span className="px-2.5 py-1 text-xs font-medium bg-slate-100 text-slate-700 rounded-md">
                 Active
               </span>
             </div>
@@ -300,18 +301,14 @@ export default function PayeesPage() {
 
       {/* Payment Methods View */}
       {activeTab === 'methods' && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {methods.map((method) => (
-            <div key={method.id} className="bg-white p-5 rounded-xl border border-stone-100/60 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_1px_8px_rgba(0,0,0,0.03)] flex items-center justify-between">
+            <div key={method.id} className="ledger-card bg-white p-4 border border-[#DDE3EC] rounded-xl flex items-center justify-between shadow-xs">
               <div>
-                <span className="font-bold text-stone-900 block text-sm">{method.displayName}</span>
-                <span className="font-mono text-[10px] text-stone-400 mt-1 block font-semibold uppercase">{method.code}</span>
+                <span className="font-bold text-[#111827] block">{method.displayName}</span>
+                <span className="font-mono text-xs text-[#667085]">{method.code}</span>
               </div>
-              <span className={`px-2.5 py-0.5 text-[10px] font-bold uppercase rounded-full border ${
-                method.active 
-                  ? 'border-emerald-250 text-emerald-800 bg-emerald-50' 
-                  : 'border-stone-250 text-stone-500 bg-stone-50'
-              }`}>
+              <span className="px-2.5 py-1 text-xs font-medium bg-slate-100 text-slate-700 rounded-md">
                 {method.active ? 'Active' : 'Inactive'}
               </span>
             </div>
@@ -327,23 +324,15 @@ export default function PayeesPage() {
 
       {/* Payee Add/Edit Modal */}
       {payeeModalOpen && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-stone-900/35 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-[0_8px_24px_rgba(0,0,0,0.12)] border border-stone-100 space-y-5">
-            <div className="flex items-center justify-between border-b border-stone-100 pb-3">
-              <h3 className="text-base font-bold text-stone-900 font-sans">
-                {editingPayee ? `Edit Payee: ${editingPayee.name}` : 'Create New Payee'}
-              </h3>
-              <button
-                onClick={() => setPayeeModalOpen(false)}
-                className="text-stone-400 hover:text-stone-600 cursor-pointer border-none bg-transparent"
-              >
-                <X size={16} />
-              </button>
-            </div>
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <h2 className="text-xl font-bold text-[#111827]">
+              {editingPayee ? `Edit Payee: ${editingPayee.name}` : 'Create New Payee'}
+            </h2>
 
             <form onSubmit={handleSavePayee} className="space-y-4">
               <div>
-                <label className="text-[10px] font-bold uppercase tracking-wider text-stone-400 block mb-1.5">
+                <label className="text-xs font-bold uppercase tracking-wider text-[#667085] block mb-1">
                   Payee Name *
                 </label>
                 <input
@@ -352,22 +341,22 @@ export default function PayeesPage() {
                   value={payeeName}
                   onChange={(e) => setPayeeName(e.target.value)}
                   placeholder="e.g. Ramesh Kumar or ABC Tools"
-                  className="w-full h-10 px-3.5 text-xs font-semibold rounded-lg border border-stone-200 bg-white text-stone-900 outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all placeholder:text-stone-400 placeholder:font-normal"
+                  className="form-input"
                 />
               </div>
 
               <div>
-                <label className="text-[10px] font-bold uppercase tracking-wider text-stone-400 block mb-1.5">
+                <label className="text-xs font-bold uppercase tracking-wider text-[#667085] block mb-1">
                   Type
                 </label>
-                <div className="grid grid-cols-2 gap-2 select-none">
+                <div className="grid grid-cols-2 gap-2">
                   <button
                     type="button"
                     onClick={() => setPayeeType('person')}
-                    className={`h-9 text-xs font-bold rounded-lg cursor-pointer border transition-all ${
+                    className={`btn h-10 text-xs font-bold ${
                       payeeType === 'person'
-                        ? 'bg-[#2563EB] text-white border-transparent'
-                        : 'bg-white text-stone-600 border-stone-200 hover:bg-stone-50'
+                        ? 'btn-primary'
+                        : 'btn-secondary'
                     }`}
                   >
                     Person
@@ -375,10 +364,10 @@ export default function PayeesPage() {
                   <button
                     type="button"
                     onClick={() => setPayeeType('company')}
-                    className={`h-9 text-xs font-bold rounded-lg cursor-pointer border transition-all ${
+                    className={`btn h-10 text-xs font-bold ${
                       payeeType === 'company'
-                        ? 'bg-[#2563EB] text-white border-transparent'
-                        : 'bg-white text-stone-600 border-stone-200 hover:bg-stone-50'
+                        ? 'btn-primary'
+                        : 'btn-secondary'
                     }`}
                   >
                     Company
@@ -387,7 +376,7 @@ export default function PayeesPage() {
               </div>
 
               <div>
-                <label className="text-[10px] font-bold uppercase tracking-wider text-stone-400 block mb-1.5">
+                <label className="text-xs font-bold uppercase tracking-wider text-[#667085] block mb-1">
                   Aliases (comma separated)
                 </label>
                 <input
@@ -395,12 +384,12 @@ export default function PayeesPage() {
                   value={aliases}
                   onChange={(e) => setAliases(e.target.value)}
                   placeholder="e.g. Ramesh, Rameshji"
-                  className="w-full h-10 px-3.5 text-xs font-semibold rounded-lg border border-stone-200 bg-white text-stone-900 outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all placeholder:text-stone-400 placeholder:font-normal"
+                  className="form-input"
                 />
               </div>
 
               <div>
-                <label className="text-[10px] font-bold uppercase tracking-wider text-stone-400 block mb-1.5">
+                <label className="text-xs font-bold uppercase tracking-wider text-[#667085] block mb-1">
                   Notes
                 </label>
                 <textarea
@@ -408,35 +397,35 @@ export default function PayeesPage() {
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                   placeholder="Optional notes or contact details..."
-                  className="w-full px-3.5 py-2 text-xs font-semibold rounded-lg border border-stone-200 bg-white text-stone-900 outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all placeholder:text-stone-400 placeholder:font-normal h-auto"
+                  className="form-input h-auto py-2"
                 />
               </div>
 
-              <div className="flex items-center gap-2.5 pt-1.5 select-none">
+              <div className="flex items-center gap-2 pt-2">
                 <input
                   type="checkbox"
                   id="favCheck"
                   checked={favourite}
                   onChange={(e) => setFavourite(e.target.checked)}
-                  className="w-4 h-4 rounded border-stone-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                  className="w-4 h-4 rounded border-[#DDE3EC] text-[#165DFF]"
                 />
-                <label htmlFor="favCheck" className="text-xs font-semibold text-stone-600 cursor-pointer">
+                <label htmlFor="favCheck" className="text-sm font-medium text-[#111827]">
                   Mark as Favourite Payee
                 </label>
               </div>
 
-              <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-stone-100">
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-[#DDE3EC]">
                 <button
                   type="button"
                   onClick={() => setPayeeModalOpen(false)}
-                  className="px-4 py-2 border border-stone-200 hover:bg-stone-50 text-stone-600 text-xs font-bold rounded-lg cursor-pointer bg-white"
+                  className="btn btn-secondary h-10 px-4"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={savingPayee}
-                  className="px-4.5 py-2 bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-xs font-bold rounded-lg shadow-sm transition-all cursor-pointer border-none disabled:opacity-50"
+                  className="btn btn-primary h-10 px-5"
                 >
                   {savingPayee ? 'Saving...' : 'Save Payee'}
                 </button>

@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useNavigate } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   api,
@@ -21,37 +20,33 @@ import {
   CreditCard,
   Banknote,
   ArrowRight,
+  Sparkles,
   Inbox,
+  Calendar,
   User,
   Tag,
-  RefreshCw,
-  FileText,
-  ListPlus,
-  LayoutGrid,
-  Clock,
-  ChevronRight
+  Wallet,
+  Zap,
+  Check,
+  Star
 } from 'lucide-react';
 import { toast } from 'sonner';
 import DetailedEntryDrawer from '../components/payment-entry/DetailedEntryDrawer';
-import BatchEntryModal from '../components/payment-entry/BatchEntryModal';
 import QuickReviewModal from '../components/review/QuickReviewModal';
 import { PayeeAvatar } from '../components/common/PayeeAvatar';
 import { StatusPill } from '../components/common/StatusPill';
 import { TransactionDrawer } from '../components/common/TransactionDrawer';
 
 export default function TodayPage() {
-  const navigate = useNavigate();
   const [command, setCommand] = useState('');
   const [preview, setPreview] = useState<QuickPreview | null>(null);
-
   const [saving, setSaving] = useState(false);
   const [suggestionIndex, setSuggestionIndex] = useState(0);
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const [newPayeeConfirmed, setNewPayeeConfirmed] = useState(false);
   const [duplicateConfirmed, setDuplicateConfirmed] = useState(false);
-  const [isStatusOpen, setIsStatusOpen] = useState(false);
 
   const [detailedOpen, setDetailedOpen] = useState(false);
-  const [batchOpen, setBatchOpen] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [selectedTransaction, setSelectedTransaction] = useState<LedgerTransaction | null>(null);
   const [reviewTransaction, setReviewTransaction] = useState<{
@@ -107,176 +102,110 @@ export default function TodayPage() {
     toast.success('Today data refreshed');
   };
 
-  // Suggestion list derivation with deterministic payee ranking
+  // Google-style ranking: strong prefix matches first, then favourites and usage.
   const commandPayeeSuggestions = useMemo(() => {
     const trimmed = command.trim();
     if (!trimmed || !master?.payees) return [];
     
-    // Extract payee term before amount/number
-    const amountStart = trimmed.search(/\s+(?=(?:₹|rs\.?\s*)?\d)/i);
-    const term = (amountStart >= 0 ? trimmed.slice(0, amountStart) : trimmed).trim();
-    if (term.length < 1) return [];
-
-    const norm = term.toLowerCase();
-
-    // Exact matches or exact lowercase matches bypass suggestions
-    if (master.payees.some((p) => p.name.toLowerCase() === norm)) {
-      return [];
-    }
-
-    const seenIds = new Set<number>();
-    const results: Payee[] = [];
-
-    const addUnique = (item: Payee) => {
-      if (!seenIds.has(item.id)) {
-        seenIds.add(item.id);
-        results.push(item);
-      }
-    };
-
-    // 1. Exact alias match (case-insensitive)
-    for (const payee of master.payees) {
-      if (payee.aliases.some((alias) => alias.toLowerCase() === norm)) {
-        addUnique(payee);
-      }
-    }
-
-    // 2. Exact name match (case-insensitive)
-    for (const payee of master.payees) {
-      if (payee.name.toLowerCase() === norm) {
-        addUnique(payee);
-      }
-    }
-
-    // 3. Prefix match (starts with trimmed term)
-    for (const payee of master.payees) {
-      if (payee.name.toLowerCase().startsWith(norm)) {
-        addUnique(payee);
-      }
-      for (const alias of payee.aliases) {
-        if (alias.toLowerCase().startsWith(norm)) {
-          addUnique(payee);
-        }
-      }
-    }
-
-    // 4. Word prefix match (any word starts with trimmed term)
-    for (const payee of master.payees) {
-      const nameWords = payee.name.toLowerCase().split(/\s+/);
-      if (nameWords.some((word) => word.startsWith(norm))) {
-        addUnique(payee);
-      }
-      for (const alias of payee.aliases) {
-        const aliasWords = alias.toLowerCase().split(/\s+/);
-        if (aliasWords.some((word) => word.startsWith(norm))) {
-          addUnique(payee);
-        }
-      }
-    }
-
-    // 5. Contains match (sub-string contains trimmed term)
-    for (const payee of master.payees) {
-      if (payee.name.toLowerCase().includes(norm)) {
-        addUnique(payee);
-      }
-      for (const alias of payee.aliases) {
-        if (alias.toLowerCase().includes(norm)) {
-          addUnique(payee);
-        }
-      }
-    }
-
-    // If we have matches, return them (up to 6)
-    if (results.length > 0) {
-      return results.slice(0, 6);
-    }
-
-    // 6. Fuzzy fallback match (Fuse.js)
-    return new Fuse(master.payees, {
-      keys: ['name', 'aliases'],
-      threshold: 0.32,
-      includeScore: true
-    })
-      .search(term)
-      .filter((res) => (res.score ?? 1) <= 0.32)
-      .slice(0, 6)
-      .map((res) => res.item);
-  }, [command, master]);
-
-  // Similar payees checks for warnings when new payee is proposed
-  const similarPayees = useMemo(() => {
-    if (!preview?.isNewPayee || !preview.payeeName || !master?.payees) return [];
-    return new Fuse(master.payees, {
-      keys: ['name', 'aliases'],
-      threshold: 0.42,
-      includeScore: true
-    })
-      .search(preview.payeeName)
-      .filter((res) => (res.score ?? 1) < 0.42)
-      .slice(0, 3)
-      .map((res) => res.item);
-  }, [preview, master]);
-
-  // Frontend debounced duplicate detection (logged within last 5 minutes)
-  const isPossibleDuplicate = useMemo(() => {
-    if (!preview?.valid || todaysItems.length === 0) return false;
-    const latest = todaysItems[0]!;
+    // Extract the text token before any numbers (amount)
+    const textToken = command.split(/\d/)[0]?.trim() || trimmed;
     
-    const payeeMatch = preview.payeeName?.toLowerCase() === latest.payeeName?.toLowerCase();
-    const amountMatch = preview.amountPaise === latest.amountPaise;
-    const methodMatch = preview.paymentMethodId === latest.paymentMethodId;
-    const categoryMatch = preview.categoryId === latest.categoryId;
-
-    return payeeMatch && amountMatch && methodMatch && categoryMatch;
-  }, [preview, todaysItems]);
-
-  // Trigger quick entry preview
-  const updatePreview = (cmdVal: string) => {
-    setNewPayeeConfirmed(false);
-    setDuplicateConfirmed(false);
-    setSuggestionIndex(0);
-    if (previewTimerRef.current) {
-      window.clearTimeout(previewTimerRef.current);
+    if (textToken.length > 0) {
+      const fuse = new Fuse(master.payees, {
+        keys: [
+          { name: 'name', weight: 0.76 },
+          { name: 'aliases', weight: 0.24 }
+        ],
+        threshold: 0.46,
+        distance: 80,
+        ignoreLocation: true,
+        includeScore: true,
+        minMatchCharLength: 1
+      });
+      const query = textToken.toLocaleLowerCase('en-IN');
+      return fuse.search(textToken)
+        .sort((left, right) => {
+          const leftPrefix = left.item.name.toLocaleLowerCase('en-IN').startsWith(query) ? 1 : 0;
+          const rightPrefix = right.item.name.toLocaleLowerCase('en-IN').startsWith(query) ? 1 : 0;
+          if (leftPrefix !== rightPrefix) return rightPrefix - leftPrefix;
+          if (left.item.favourite !== right.item.favourite) return Number(right.item.favourite) - Number(left.item.favourite);
+          const usageDifference = right.item.paymentCount - left.item.paymentCount;
+          if (usageDifference !== 0) return usageDifference;
+          return (left.score ?? 1) - (right.score ?? 1);
+        })
+        .map((result) => result.item)
+        .slice(0, 4);
     }
-    if (!cmdVal.trim()) {
+    
+    return master.payees.slice(0, 6);
+  }, [command, master?.payees]);
+
+  // Handle Quick Entry input & live preview
+  useEffect(() => {
+    window.clearTimeout(previewTimerRef.current);
+    setSuggestionIndex(0);
+    
+    if (!command.trim()) {
       setPreview(null);
+      setNewPayeeConfirmed(false);
+      setDuplicateConfirmed(false);
+      setShowSuggestions(false);
       return;
     }
 
+    const normalizedCommand = command.trim().toLocaleLowerCase('en-IN');
+    const exactPayee = master?.payees.some((payee) =>
+      [payee.name, ...payee.aliases].some(
+        (name) => name.toLocaleLowerCase('en-IN') === normalizedCommand
+      )
+    );
+    setShowSuggestions(!/\d/.test(command) && !exactPayee);
+
     previewTimerRef.current = window.setTimeout(async () => {
       try {
-        const previewResult = await post<QuickPreview>('/quick-entry/preview', {
-          command: cmdVal
-        });
-        setPreview(previewResult);
-      } catch (caught) {
+        const res = await post<QuickPreview>('/quick-entry/preview', { command });
+        setPreview(res);
+      } catch {
         setPreview(null);
-        toast.error(caught instanceof Error ? caught.message : 'Entry could not be parsed');
       }
-    }, 130);
+    }, 120);
+
+    return () => window.clearTimeout(previewTimerRef.current);
+  }, [command, master?.payees]);
+
+  const executeSave = async (payeeConfirmed: boolean, dupConfirmed: boolean) => {
+    if (!command.trim() || saving) return;
+    setSaving(true);
+    try {
+      const res = await post<LedgerTransaction>('/quick-entry/save', { command });
+
+      toast.success(`Logged ₹${(res.amountPaise / 100).toLocaleString('en-IN')} paid to ${res.payeeName}`);
+      setCommand('');
+      setPreview(null);
+      setNewPayeeConfirmed(false);
+      setDuplicateConfirmed(false);
+      setShowSuggestions(false);
+      await Promise.all([refetchDashboard(), refetchTransactions(), refetchMaster()]);
+
+      setTimeout(() => inputRef.current?.focus(), 50);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to record payment');
+    } finally {
+      setSaving(false);
+    }
   };
 
-  useEffect(() => {
-    updatePreview(command);
-  }, [command]);
-
-  useEffect(() => {
-    return () => {
-      if (previewTimerRef.current) window.clearTimeout(previewTimerRef.current);
-    };
-  }, []);
-
   const applyPayeeSuggestion = (payee: Payee) => {
-    const trimmed = command.trim();
-    const amountStart = trimmed.search(/\s+(?=(?:₹|rs\.?\s*)?\d)/i);
-    const remainder = amountStart >= 0 ? trimmed.slice(amountStart).trim() : '';
-    const newCmd = `${payee.name}${remainder ? ` ${remainder}` : ' '}`;
-    setCommand(newCmd);
+    // Replace the text portion with the selected payee name and append a space
+    const amountMatch = command.match(/\d.*/);
+    const amountPart = amountMatch ? ` ${amountMatch[0]}` : ' ';
+    setCommand(`${payee.name}${amountPart}`);
+    setShowSuggestions(false);
     inputRef.current?.focus();
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (commandPayeeSuggestions.length > 0 && suggestionIndex >= 0) {
+    if (showSuggestions && commandPayeeSuggestions.length > 0) {
       if (e.key === 'ArrowDown') {
         e.preventDefault();
         setSuggestionIndex((prev) => (prev + 1) % commandPayeeSuggestions.length);
@@ -284,688 +213,371 @@ export default function TodayPage() {
       }
       if (e.key === 'ArrowUp') {
         e.preventDefault();
-        setSuggestionIndex(
-          (prev) => (prev - 1 + commandPayeeSuggestions.length) % commandPayeeSuggestions.length
-        );
+        setSuggestionIndex((prev) => (prev - 1 + commandPayeeSuggestions.length) % commandPayeeSuggestions.length);
         return;
       }
       if (e.key === 'Tab') {
-        const payee = commandPayeeSuggestions[suggestionIndex];
-        if (payee) {
-          e.preventDefault();
-          applyPayeeSuggestion(payee);
-        }
-        return;
-      }
-      if (e.key === 'Escape') {
         e.preventDefault();
-        setSuggestionIndex(-1);
+        const selected = commandPayeeSuggestions[suggestionIndex];
+        if (selected) applyPayeeSuggestion(selected);
         return;
       }
     }
 
     if (e.key === 'Enter') {
       e.preventDefault();
-      void handleSave();
-    }
-  };
-
-  const handleSave = async () => {
-    if (
-      !preview?.valid ||
-      saving ||
-      (preview.isNewPayee && similarPayees.length > 0 && !newPayeeConfirmed) ||
-      (isPossibleDuplicate && !duplicateConfirmed)
-    ) {
-      return;
-    }
-    setSaving(true);
-    try {
-      const result = await post<{
-        transaction: { id: number; updatedAt: string; needsReview: boolean };
-        duplicate: boolean;
-        duplicateReason: string | null;
-        createdPayee: boolean;
-      }>('/quick-entry/save', { command });
-
-      toast.success(result.duplicate ? 'Payment saved — possible duplicate' : 'Payment saved', {
-        description: result.createdPayee
-          ? 'New payee created. Cash used by default.'
-          : (result.duplicateReason ?? 'Stored locally with an audit record.')
-      });
-
-      setCommand('');
-      setPreview(null);
-      setDuplicateConfirmed(false);
-      await Promise.all([refetchDashboard(), refetchTransactions()]);
-
-      if (result.transaction.needsReview) {
-        setReviewTransaction({
-          id: result.transaction.id,
-          updatedAt: result.transaction.updatedAt,
-          amountPaise: preview.amountPaise ?? undefined,
-          payeeName: preview.payeeName ?? undefined
-        });
-        setReviewOpen(true);
+      // If suggestions are open and user presses Enter before typing amount, select the payee
+      if (showSuggestions && commandPayeeSuggestions.length > 0 && !/\d/.test(command)) {
+        const selected = commandPayeeSuggestions[suggestionIndex];
+        if (selected) {
+          applyPayeeSuggestion(selected);
+          return;
+        }
       }
-      inputRef.current?.focus();
-    } catch (caught) {
-      toast.error(caught instanceof Error ? caught.message : 'Payment could not be saved');
-    } finally {
-      setSaving(false);
+
+      if (preview?.errors.length) return;
+      if (preview?.isNewPayee && !newPayeeConfirmed) {
+        setNewPayeeConfirmed(true);
+        return;
+      }
+      if (preview?.warnings.some((w) => w.includes('duplicate')) && !duplicateConfirmed) {
+        setDuplicateConfirmed(true);
+        return;
+      }
+      executeSave(newPayeeConfirmed, duplicateConfirmed);
+    }
+
+    if (e.key === 'Escape') {
+      setShowSuggestions(false);
     }
   };
 
-  // Operational stats calculations
-  const uniquePayees = new Set(todaysItems.map((item) => item.payeeId)).size;
-  const firstPaymentTime = todaysItems.length > 0 ? formatTime12(todaysItems[todaysItems.length - 1]!.transactionTime) : '—';
-  const latestPaymentTime = todaysItems.length > 0 ? formatTime12(todaysItems[0]!.transactionTime) : '—';
-  const averagePayment = todaysItems.length > 0
-    ? Math.round(todaysItems.reduce((sum, item) => sum + item.amountPaise, 0) / todaysItems.length)
-    : 0;
+  const handleFrequentClick = (payeeName: string) => {
+    setCommand(`${payeeName} `);
+    inputRef.current?.focus();
+  };
 
-  // Split Quick Payees list into Frequent and Recent groups
-  const frequentPayees = useMemo(() => {
-    return master?.payees?.filter((p) => p.favourite) || [];
-  }, [master]);
+  // Close dropdown on click outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node) && !inputRef.current?.contains(e.target as Node)) {
+        setShowSuggestions(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
-  const recentPayees = useMemo(() => {
-    return master?.payees?.filter((p) => !p.favourite && p.paymentCount > 0)
-      .sort((a, b) => b.paymentCount - a.paymentCount)
-      .slice(0, 8) || [];
-  }, [master]);
-
-  // Determine whether to show the Purpose column
-  const hasAnyNotes = useMemo(() => todaysItems.some((item) => item.note?.trim()), [todaysItems]);
-
-  // Calculate Outgoing Split Percentages
-  const totalOutgoingVal = dashboard?.totalOutgoingPaise ?? 0;
-  const cashVal = dashboard?.cashPaise ?? 0;
-  const digitalVal = dashboard?.digitalPaise ?? 0;
-  const cashPct = totalOutgoingVal ? Math.round((cashVal / totalOutgoingVal) * 100) : 0;
-  const digitalPct = totalOutgoingVal ? Math.round((digitalVal / totalOutgoingVal) * 100) : 0;
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
 
   return (
-    <div className="space-y-10 max-w-7xl mx-auto mb-10">
-      {/* 1. Header (Apple / Notion Minimal Title & Ghost style demoted actions) */}
-      <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-stone-200/40 pb-6">
-        <div>
-          {/* Screen reader only header to support Playwright E2E locator assertions */}
-          <h1 className="sr-only">Today</h1>
-          <h2 className="text-2xl font-bold tracking-tight text-stone-900 font-sans">
-            {new Intl.DateTimeFormat('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }).format(new Date())}
-          </h2>
-          <p className="text-xs text-stone-500 mt-1 font-medium">
-            Good morning, Operator. Record outlays, track cash distributions, and complete category reviews.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handleRefresh}
-            disabled={loading}
-            className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-stone-600 hover:text-stone-900 hover:bg-stone-100/60 border border-stone-200 rounded-lg transition-all duration-150 cursor-pointer bg-white"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
-          </button>
-          <button
-            onClick={() => setBatchOpen(true)}
-            className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-stone-600 hover:text-stone-900 hover:bg-stone-100/60 border border-stone-200 rounded-lg transition-all duration-150 cursor-pointer bg-white"
-          >
-            <ListPlus className="w-3.5 h-3.5" />
-            Batch Entry
-          </button>
-          <button
-            onClick={() => setDetailedOpen(true)}
-            className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold bg-[#2563EB] hover:bg-[#1D4ED8] text-white rounded-lg shadow-sm hover:shadow transition-all duration-150 cursor-pointer border-none"
-          >
-            <FileText className="w-3.5 h-3.5" />
-            Detailed Form
-          </button>
-        </div>
-      </header>
-
-      {/* 2. Unified Hero Command Entry Box (Floating Card container with internal divider) */}
-      <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.02),0_4px_16px_rgba(0,0,0,0.02)] border border-stone-100/60 overflow-hidden flex flex-col transition-shadow focus-within:shadow-[0_1px_4px_rgba(37,99,235,0.05),0_4px_20px_rgba(37,99,235,0.04)] focus-within:border-blue-400/60">
-        
-        {/* Entry field at the top */}
-        <div className="flex items-center h-16 bg-white relative">
-          <span className="w-14 h-full text-stone-400 flex items-center justify-center text-lg font-bold select-none bg-stone-50/20 border-r border-stone-100/80">
-            ₹
-          </span>
-          <input
-            ref={inputRef}
-            type="text"
-            role="combobox"
-            aria-autocomplete="list"
-            aria-expanded={commandPayeeSuggestions.length > 0 && suggestionIndex >= 0}
-            aria-controls="payee-listbox"
-            value={command}
-            onChange={(e) => {
-              setCommand(e.target.value);
-            }}
-            onKeyDown={handleKeyDown}
-            placeholder="Payee, amount, date, method, purpose..."
-            className="flex-1 h-full px-5 text-sm font-semibold tracking-tight text-stone-800 border-none outline-none focus:ring-0 focus:outline-none"
-            autoComplete="off"
-            autoFocus
-          />
-          <kbd className="mr-5 text-[9px] select-none uppercase font-mono font-extrabold text-stone-400 bg-stone-50 border border-stone-200/80 px-2 py-0.5 rounded shadow-3xs">
-            Enter
-          </kbd>
-        </div>
-
-        {/* Cohesive Connected Divider */}
-        <div className="border-t border-stone-100/80" />
-
-        {/* Connected Parsed Fields preview row */}
-        <div className="flex flex-wrap items-center gap-3 px-5 py-3 bg-stone-50/30 select-none">
-          <span className="text-[10px] font-bold text-stone-400 uppercase tracking-wider mr-1">Parsed Fields</span>
-          
-          <div className={`flex items-center gap-1.5 px-3 py-1 text-xs rounded-full border font-semibold transition-colors duration-150 ${
-            preview?.payeeName
-              ? 'bg-blue-50 text-blue-800 border-blue-200'
-              : 'bg-white text-stone-400 border-stone-200/80 border-dashed'
-          }`}>
-            <User className="w-3.5 h-3.5 shrink-0" />
-            <span>Payee: {preview?.payeeName || '—'}</span>
-          </div>
-
-          <div className={`flex items-center gap-1.5 px-3 py-1 text-xs rounded-full border font-semibold transition-colors duration-150 ${
-            preview?.amountPaise
-              ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-              : 'bg-white text-stone-400 border-stone-200/80 border-dashed'
-          }`}>
-            <Banknote className="w-3.5 h-3.5 shrink-0" />
-            <span>Amount: {preview?.amountPaise ? formatInr(preview.amountPaise) : '—'}</span>
-          </div>
-
-          <div className={`flex items-center gap-1.5 px-3 py-1 text-xs rounded-full border font-semibold transition-colors duration-150 ${
-            preview?.paymentMethodName
-              ? 'bg-indigo-50 text-indigo-800 border-indigo-200'
-              : 'bg-white text-stone-400 border-stone-200/80 border-dashed'
-          }`}>
-            <CreditCard className="w-3.5 h-3.5 shrink-0" />
-            <span>Method: {preview?.paymentMethodName || '—'}</span>
-          </div>
-
-          <div className={`flex items-center gap-1.5 px-3 py-1 text-xs rounded-full border font-semibold transition-colors duration-150 ${
-            preview?.categoryName
-              ? 'bg-purple-50 text-purple-800 border-purple-200'
-              : 'bg-white text-stone-400 border-stone-200/80 border-dashed'
-          }`}>
-            <Tag className="w-3.5 h-3.5 shrink-0" />
-            <span>Category: {preview?.categoryName || '—'}</span>
+    <div className="w-full space-y-4">
+      <section className="relative rounded-2xl border border-[#DDE3EC] bg-white px-4 py-4 shadow-[var(--shadow-card)] md:px-5">
+        <div className="mb-3 flex items-center justify-between gap-4">
+          <h1 className="text-lg font-bold text-[#111827]">Record payment</h1>
+          <div className="flex items-center rounded-lg bg-slate-100 p-0.5 text-xs font-semibold">
+            <button className="rounded-md bg-white px-3 py-1.5 text-[#165DFF] shadow-xs">Quick entry</button>
+            <button onClick={() => setDetailedOpen(true)} className="rounded-md px-3 py-1.5 text-[#667085] hover:text-[#111827]">Form</button>
           </div>
         </div>
 
-        <AnimatePresence>
-          {commandPayeeSuggestions.length > 0 && suggestionIndex >= 0 && (
-            <motion.div
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: 'auto', opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: 0.15 }}
-              id="payee-listbox"
-              role="listbox"
-              aria-label="Payee matches"
-              className="p-4 border-t border-stone-100 bg-stone-50/20 flex flex-col gap-2 overflow-hidden"
-            >
-              <div className="flex items-center justify-between text-[10px] text-stone-400 font-bold px-1">
-                <span>SUGGESTED ALIAS & NAME MATCHES</span>
-                <span>
-                  Use <kbd className="text-[9px]">↑↓</kbd> or <kbd className="text-[9px]">Tab</kbd> to select
-                </span>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-                {commandPayeeSuggestions.map((payee, idx) => (
-                  <button
-                    type="button"
-                    key={payee.id}
-                    role="option"
-                    aria-selected={idx === suggestionIndex}
-                    onClick={() => applyPayeeSuggestion(payee)}
-                    className={`flex items-center justify-between p-2.5 rounded-lg border cursor-pointer select-none transition-colors text-left ${
-                      idx === suggestionIndex
-                        ? 'border-blue-500 bg-white text-stone-900 shadow-3xs font-semibold'
-                        : 'border-stone-200/80 bg-white hover:bg-stone-50/80 text-stone-700'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2 overflow-hidden">
-                      <span className="w-6 h-6 rounded bg-stone-100 text-stone-600 flex items-center justify-center font-bold text-[10px] uppercase shrink-0">
-                        {payee.name.slice(0, 2)}
-                      </span>
-                      <div className="truncate text-xs">
-                        <strong className="text-stone-950 block font-bold truncate leading-normal">
-                          {payee.name}
-                        </strong>
-                      </div>
-                    </div>
-                    <ChevronRight className="w-3 h-3 text-stone-400" />
-                  </button>
-                ))}
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        <div className="mb-3 flex flex-wrap gap-1.5">
+          {[
+            { label: 'Date', value: preview?.transactionDate === todayDate || !preview?.transactionDate ? 'Today' : preview.transactionDate, tone: 'bg-slate-100 text-slate-600' },
+            { label: 'Payee', value: preview?.payeeName || 'Not selected', tone: 'bg-violet-50 text-violet-700' },
+            { label: 'Amount', value: preview?.amountPaise ? formatInr(preview.amountPaise) : '—', tone: 'bg-emerald-50 text-emerald-700' },
+            { label: 'Category', value: preview?.categoryName || 'Auto', tone: 'bg-amber-50 text-amber-700' },
+            { label: 'Type', value: preview?.paymentMethodName || 'Cash', tone: 'bg-sky-50 text-sky-700' },
+            { label: 'Last paid', value: lastPayment ? `${formatInr(lastPayment.amountPaise)} · ${lastPayment.transactionDate}` : preview?.payeeId ? 'No previous payment' : 'Select payee', tone: 'bg-blue-50 text-blue-700' }
+          ].map(({ label, value, tone }) => (
+            <div key={label} className={`flex items-center gap-1.5 rounded-[6px] px-2.5 py-1.5 text-xs ${tone}`}>
+              <span className="opacity-75">{label}</span><strong className="max-w-52 truncate font-semibold">{value}</strong>
+            </div>
+          ))}
+        </div>
 
-        {/* Validation smart preview panel */}
-        <div
-          className={`px-5 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-t border-stone-100/85 ${
-            preview && !preview.valid ? 'bg-red-50/10' : 'bg-stone-50/15'
-          }`}
-        >
-          {preview ? (
-            <div className="flex-1 flex flex-col gap-2">
-              <div className="flex items-center gap-2.5">
-                <span
-                  className={`flex items-center justify-center w-5.5 h-5.5 rounded-full shrink-0 ${
-                    preview.valid ? 'text-emerald-700 bg-emerald-100' : 'text-stone-455 bg-stone-100'
-                  }`}
-                >
-                  {preview.valid ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Search className="w-3.5 h-3.5" />}
-                </span>
-                <div className="text-xs">
-                  <span className="text-stone-400 font-bold block uppercase tracking-wider text-[9px]">Parsed payment</span>
-                  <strong className="text-stone-905 font-bold text-sm block mt-0.5">
-                    {preview.payeeName || 'Choose payee'} · {preview.amountPaise ? formatInr(preview.amountPaise) : 'Amount missing'}
-                  </strong>
-                </div>
-              </div>
+        {/* Main Quick Entry Input Container */}
+        <div className="relative">
+          <div className="relative flex items-center">
+            <div className="absolute left-4.5 text-[#165DFF]"><Search size={22} className="stroke-[2.5]" /></div>
+            <input
+              ref={inputRef}
+              type="text"
+              name="quick-entry-input"
+              aria-label="Quick payment input"
+              autoComplete="off"
+              value={command}
+              onChange={(e) => setCommand(e.target.value)}
+              onKeyDown={handleKeyDown}
+              onFocus={() => {
+                if (command.trim() && !/\d/.test(command)) setShowSuggestions(true);
+              }}
+              placeholder="Payee, amount, method and purpose…"
+              className="w-full h-12 pl-13 pr-5 text-base font-semibold rounded-lg border border-slate-300 focus-visible:border-[#165DFF] focus-visible:ring-3 focus-visible:ring-[#165DFF]/12 bg-white text-[#111827] placeholder:text-slate-400 transition-all"
+            />
+          </div>
 
-              <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[10px] text-stone-500 pl-8 font-semibold">
-                <span className="bg-white border border-stone-200/80 px-1.5 py-0.5 rounded">
-                  {preview.paymentMethodName || 'Method required'}
-                </span>
-                <span className="bg-white border border-stone-200/80 px-1.5 py-0.5 rounded">
-                  {preview.categoryName || 'Category required'}
-                </span>
-                <span>
-                  {preview.transactionDate || todayDate || 'Today'} · {preview.transactionTime ? formatTime12(preview.transactionTime) : 'Now'}
-                </span>
-                {preview.note && (
-                  <span className="truncate max-w-[200px]" title={preview.note}>
-                    {preview.note}
+          {/* New Payee or Duplicate Confirmation Banner */}
+          <AnimatePresence>
+            {preview && command.trim() && (preview.isNewPayee || preview.warnings.length > 0) && (
+              <motion.div
+                initial={{ opacity: 0, y: -6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -6 }}
+                className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-xl flex flex-wrap items-center justify-between gap-3 text-xs"
+              >
+                <div className="flex items-center gap-2 text-amber-900 font-medium">
+                  <AlertTriangle size={16} className="text-amber-600 flex-shrink-0" />
+                  <span>
+                    {preview.isNewPayee 
+                      ? `"${preview.payeeName}" is not in your payees list yet. Press Enter again to create it automatically.`
+                      : preview.warnings[0]}
                   </span>
+                </div>
+                {preview.isNewPayee && !newPayeeConfirmed && (
+                  <button
+                    onClick={() => setNewPayeeConfirmed(true)}
+                    className="px-3 py-1 bg-amber-600 text-white rounded-lg font-bold hover:bg-amber-700 transition-colors shadow-2xs"
+                  >
+                    + Confirm New Payee
+                  </button>
                 )}
-              </div>
-
-              {/* Similar payee exists warnings */}
-              {preview.isNewPayee && similarPayees.length > 0 && !newPayeeConfirmed && (
-                <div className="mt-2 p-2.5 bg-amber-50 border border-amber-200 rounded-lg pl-8 text-xs text-amber-900">
-                  <strong className="font-bold block mb-1">Similar payees exist:</strong>
-                  <div className="flex flex-wrap gap-2 mt-1.5">
-                    {similarPayees.map((p) => (
+                {!preview.categoryId && master?.categories.length ? (
+                  <div className="flex flex-wrap items-center gap-1">
+                    <span className="mr-1 text-amber-800">Choose:</span>
+                    {master.categories.slice(0, 6).map((category) => (
                       <button
-                        key={p.id}
-                        onClick={() => {
-                          const newCmd = command.replace(
-                            new RegExp(`^${preview.payeeName?.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'i'),
-                            p.name
-                          );
-                          setCommand(newCmd);
-                        }}
-                        className="px-2 py-0.5 bg-white border border-amber-300 hover:border-amber-500 rounded text-[11px] text-amber-900 transition-colors cursor-pointer font-semibold"
+                        type="button"
+                        key={category.id}
+                        onClick={() => setCommand((current) => `${current.trim()} ${category.name}`)}
+                        className="rounded-md bg-white px-2 py-1 font-semibold text-amber-800 ring-1 ring-amber-200 hover:bg-amber-100"
                       >
-                        Use {p.name}
+                        {category.name}
                       </button>
                     ))}
-                    <button
-                      onClick={() => setNewPayeeConfirmed(true)}
-                      className="px-2 py-0.5 bg-amber-800 text-white rounded text-[11px] hover:bg-amber-900 transition-colors cursor-pointer font-bold"
-                    >
-                      Create “{preview.payeeName}” anyway
-                    </button>
                   </div>
+                ) : null}
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Compact dynamic assistant */}
+          <AnimatePresence>
+            {showSuggestions && commandPayeeSuggestions.length > 0 && (
+              <motion.div
+                ref={dropdownRef}
+                initial={{ opacity: 0, y: -2 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -2 }}
+                transition={{ duration: 0.12 }}
+                className="mt-2 border-t border-[#E5E7EB] pt-2"
+              >
+                <div className="grid grid-cols-1 gap-1 md:grid-cols-2 xl:grid-cols-4">
+                  {commandPayeeSuggestions.map((payee, idx) => {
+                    const isSelected = idx === suggestionIndex;
+                    return (
+                      <button
+                        type="button"
+                        key={payee.id}
+                        onClick={() => applyPayeeSuggestion(payee)}
+                        onMouseEnter={() => setSuggestionIndex(idx)}
+                        className={`min-w-0 rounded-md px-3 py-2 text-left transition-colors ${
+                          isSelected ? 'bg-[#E9F1FF] text-[#165DFF]' : 'hover:bg-slate-100 text-[#111827]'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="truncate text-sm font-semibold">{payee.name}</span>
+                          {payee.favourite && <Star size={12} className="shrink-0 fill-amber-400 text-amber-500" />}
+                        </div>
+                        <div className="mt-0.5 truncate text-xs text-[#667085]">
+                          {payee.paymentCount} payments
+                          {payee.defaultCategoryId ? ` · ${master?.categories.find((category) => category.id === payee.defaultCategoryId)?.name}` : ''}
+                          {payee.defaultPaymentMethodId ? ` · ${master?.paymentMethods.find((method) => method.id === payee.defaultPaymentMethodId)?.displayName}` : ''}
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
-              )}
-
-              {/* Debounced duplicate detection warnings block */}
-              {isPossibleDuplicate && (
-                <div className="mt-2 p-2.5 bg-rose-50/50 border border-rose-200 rounded-lg pl-8 text-xs text-rose-900">
-                  <strong className="font-bold block mb-1">⚠️ Similar transaction just logged in the last 5 minutes</strong>
-                  <p className="mb-2">A transaction with this exact payee, amount, category, and payment method was already saved.</p>
-                  <label className="flex items-center gap-2 cursor-pointer font-bold">
-                    <input
-                      type="checkbox"
-                      checked={duplicateConfirmed}
-                      onChange={(e) => setDuplicateConfirmed(e.target.checked)}
-                      className="rounded border-rose-350 text-rose-800 focus:ring-rose-500"
-                    />
-                    I confirm this is a separate, intentional transaction
-                  </label>
-                </div>
-              )}
-
-              {(preview.errors.length > 0 || preview.warnings.length > 0) && (
-                <p className="text-[10px] text-rose-705 pl-8 mt-1 font-bold">
-                  {[...preview.errors, ...preview.warnings].join(' · ')}
-                </p>
-              )}
-            </div>
-          ) : (
-            <div className="flex-1 flex items-center gap-2.5 text-xs text-stone-505 py-1 pl-1">
-              <Search className="w-4 h-4 text-stone-450 shrink-0" />
-              <div>
-                <span>Type transaction details above to start quick recording.</span>
-              </div>
-            </div>
-          )}
-
-          {preview && (
-            <button
-              onClick={() => void handleSave()}
-              disabled={
-                !preview.valid ||
-                saving ||
-                (preview.isNewPayee && similarPayees.length > 0 && !newPayeeConfirmed) ||
-                (isPossibleDuplicate && !duplicateConfirmed)
-              }
-              className="px-4 py-2 bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-xs font-bold rounded-lg shrink-0 flex items-center gap-1.5 shadow-sm transition-all cursor-pointer border-none disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {saving ? 'Saving...' : 'Post outlay'}
-              <ArrowRight className="w-3.5 h-3.5" />
-            </button>
-          )}
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
 
-        {/* 5. Separated Quick Payees Chips (Full pill radius, muted background, starred distinct tint) */}
-        <div className="px-5 py-3.5 flex flex-col gap-3 bg-stone-50/10 border-t border-stone-100/70 select-none">
-          {frequentPayees.length > 0 && (
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-[10px] font-bold text-stone-400 uppercase tracking-wider mr-2 w-16 text-left">Frequent</span>
-              {frequentPayees.map((payee) => (
+        {preview && command.trim() && !showSuggestions && (
+          <div className="mt-2 flex flex-col gap-2 border-t border-[#E5E7EB] pt-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="text-sm text-[#667085]">
+              {lastPayment ? (
+                <span>Last paid <strong className="font-semibold text-[#111827]">{formatInr(lastPayment.amountPaise)}</strong> on {lastPayment.transactionDate} via {lastPayment.paymentMethodName || 'Cash'}.</span>
+              ) : preview.payeeId ? (
+                <span>This is the first recorded payment for this payee.</span>
+              ) : (
+                <span>{preview.errors[0] || 'Choose a payee, then add an amount.'}</span>
+              )}
+              {preview.categoryName && <span> Suggested category: <strong className="font-semibold text-[#111827]">{preview.categoryName}</strong>.</span>}
+              {!preview.amountPaise && preview.payeeId && (
+                <button type="button" onClick={() => setCommand((current) => `${current.trim()} 2500`)} className="ml-1 font-semibold text-[#165DFF] hover:underline">Try ₹2,500</button>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <button onClick={() => setDetailedOpen(true)} className="btn btn-secondary h-8 px-3 text-xs">Edit</button>
+              <button onClick={() => executeSave(newPayeeConfirmed, duplicateConfirmed)} disabled={!preview.valid || saving} className="btn btn-primary h-8 px-3 text-xs">{saving ? 'Saving…' : 'Save payment'}</button>
+            </div>
+          </div>
+        )}
+        {command.trim() && !showSuggestions && (
+          <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-[#667085]">
+            <span className="mr-1">Add:</span>
+            {[
+              { label: 'Cash', token: 'cash' },
+              { label: 'UPI', token: 'upi' },
+              { label: 'Bank', token: 'bank' },
+              { label: 'Materials', token: 'materials' },
+              { label: 'Wages', token: 'wages' },
+              { label: 'Transport', token: 'transport' },
+              { label: 'Fuel', token: 'fuel' },
+              { label: 'Today', token: 'today' },
+              { label: 'Yesterday', token: 'yesterday' }
+            ]
+              .filter((suggestion) => !command.toLocaleLowerCase('en-IN').includes(suggestion.token))
+              .map((suggestion) => (
                 <button
-                  key={payee.id}
-                  onClick={() => setCommand(`${payee.name} `)}
-                  className="px-4 py-1 text-xs font-bold rounded-full bg-blue-50 text-blue-805 hover:bg-blue-100/80 transition-all duration-150 cursor-pointer border-none"
+                  type="button"
+                  key={suggestion.token}
+                  onClick={() => setCommand((current) => `${current.trim()} ${suggestion.token}`)}
+                  className="rounded-md bg-slate-100 px-2 py-1 font-medium text-[#475467] hover:bg-[#E9F1FF] hover:text-[#165DFF]"
                 >
-                  {payee.name}
+                  {suggestion.label}
                 </button>
               ))}
-            </div>
-          )}
-
-          {recentPayees.length > 0 && (
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-[10px] font-bold text-stone-400 uppercase tracking-wider mr-2 w-16 text-left">Recent</span>
-              {recentPayees.map((payee) => (
-                <button
-                  key={payee.id}
-                  onClick={() => setCommand(`${payee.name} `)}
-                  className="px-4 py-1 text-xs font-semibold rounded-full bg-stone-100/85 text-stone-700 hover:bg-stone-200/80 transition-all duration-150 cursor-pointer border-none"
-                >
-                  {payee.name}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* 3. Stat Cards */}
-      <section className="grid grid-cols-1 md:grid-cols-3 gap-6" aria-label="Workstation totals">
-        {/* Total Outgoing Card */}
-        <article className="bg-white rounded-xl p-6 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_1px_8px_rgba(0,0,0,0.03)] border border-stone-100/40 relative overflow-hidden transition-all duration-200 hover:shadow-md">
-          <div className="flex items-start justify-between">
-            <div className="space-y-1">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-[#667085]">Total Outgoing</span>
-              <strong className="text-3xl font-mono text-[#111827] tracking-tight block py-2 tabular-nums">
-                {formatInr(dashboard?.totalOutgoingPaise ?? 0)}
-              </strong>
-            </div>
-            <span className="w-10 h-10 rounded-full bg-blue-50 text-[#2563EB] flex items-center justify-center shrink-0">
-              <ArrowRight className="w-5 h-5 rotate-45" />
-            </span>
           </div>
-          <div className="flex items-center justify-between border-t border-stone-100/60 pt-3.5 mt-3 text-[10px] text-stone-500 font-semibold">
-            <span>Posted today</span>
-            <span>{dashboard?.paymentCount ?? 0} payments</span>
+        )}
+        {!command.trim() && (
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-[#667085]">
+            <span>Try:</span>
+            {[
+              'Vijay Patel 2500',
+              'Ramesh Kumar 1200 cash wages',
+              'Mahesh Transport 5000 bank transport'
+            ].map((example) => (
+              <button key={example} type="button" onClick={() => setCommand(example)} className="rounded-md bg-slate-100 px-2 py-1 text-[#475467] hover:bg-[#E9F1FF] hover:text-[#165DFF]">{example}</button>
+            ))}
+            <span className="ml-auto">Tab completes · Enter saves</span>
           </div>
-        </article>
-
-        {/* Outgoing by Method split bar Card */}
-        <article className="bg-white rounded-xl p-6 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_1px_8px_rgba(0,0,0,0.03)] border border-stone-100/40 relative overflow-hidden transition-all duration-200 hover:shadow-md">
-          <div className="flex items-start justify-between">
-            <div className="space-y-1 flex-1">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-[#667085]">Outgoing by Method</span>
-              <div className="grid grid-cols-2 gap-4 py-2">
-                <div>
-                  <span className="text-[9px] font-extrabold text-stone-450 block uppercase">Cash</span>
-                  <span className="text-lg font-mono font-bold text-stone-900 block tabular-nums">
-                    {formatInr(dashboard?.cashPaise ?? 0)}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-[9px] font-extrabold text-stone-450 block uppercase">Digital</span>
-                  <span className="text-lg font-mono font-bold text-stone-900 block tabular-nums">
-                    {formatInr(dashboard?.digitalPaise ?? 0)}
-                  </span>
-                </div>
-              </div>
-            </div>
-            <span className="w-10 h-10 rounded-full bg-amber-50 text-[#F79009] flex items-center justify-center shrink-0">
-              <CreditCard className="w-5 h-5" />
-            </span>
-          </div>
-
-          <div className="w-full bg-stone-100 h-1.5 rounded-full overflow-hidden mt-3 flex">
-            <div
-              style={{ width: `${cashPct}%` }}
-              className="bg-amber-500 h-full transition-all duration-300"
-              title="Cash portion"
-            />
-            <div
-              style={{ width: `${digitalPct}%` }}
-              className="bg-blue-500 h-full transition-all duration-300"
-              title="Digital portion"
-            />
-          </div>
-
-          <div className="flex justify-between items-center text-[10px] text-stone-500 mt-3 font-semibold">
-            <span className="flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-              Cash ({cashPct}%)
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-              Digital ({digitalPct}%)
-            </span>
-          </div>
-        </article>
-
-        {/* Pending Reviews Card */}
-        <article
-          onClick={() => navigate('/review')}
-          className={`rounded-xl p-6 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_1px_8px_rgba(0,0,0,0.03)] border border-stone-100/40 relative overflow-hidden transition-all duration-200 hover:shadow-md cursor-pointer ${
-            dashboard?.reviewCount && dashboard.reviewCount > 0 ? 'bg-amber-50/15 border-amber-100/60' : 'bg-white'
-          }`}
-        >
-          <div className="flex items-start justify-between">
-            <div className="space-y-1">
-              <span className={`text-[10px] font-bold uppercase tracking-wider ${dashboard?.reviewCount && dashboard.reviewCount > 0 ? 'text-amber-800' : 'text-[#667085]'}`}>
-                Pending Reviews
-              </span>
-              <strong className={`text-3xl font-mono tracking-tight block py-2 ${dashboard?.reviewCount && dashboard.reviewCount > 0 ? 'text-amber-800' : 'text-stone-900'}`}>
-                {dashboard?.reviewCount ?? 0}
-              </strong>
-            </div>
-            <span className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${
-              dashboard?.reviewCount && dashboard.reviewCount > 0 ? 'bg-amber-100 text-amber-750' : 'bg-stone-50 text-stone-500'
-            }`}>
-              <Inbox className="w-5 h-5" />
-            </span>
-          </div>
-          <div className="flex items-center justify-between border-t border-stone-100/60 pt-3.5 mt-3 text-[10px] text-stone-500 font-semibold">
-            <span>Requires category map</span>
-            <span className={dashboard?.reviewCount && dashboard.reviewCount > 0 ? 'text-amber-700 font-bold' : ''}>
-              {dashboard?.reviewCount && dashboard.reviewCount > 0 ? 'Attention Needed' : 'Clean / Verified'}
-            </span>
-          </div>
-        </article>
+        )}
       </section>
 
-      {/* 4. Dashboard Table and Collapsible Desk Stats Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Outlay Ledger Table */}
-        <section className={`space-y-3 transition-all duration-300 ${isStatusOpen ? 'lg:col-span-2' : 'lg:col-span-3'}`}>
-          <div className="flex items-center justify-between pb-1">
-            <h2 className="text-xs font-bold uppercase tracking-wider text-stone-900 flex items-center gap-1.5">
-              <Clock className="w-3.5 h-3.5 text-stone-400" />
-              Outlay Ledger
-            </h2>
-            <div className="flex items-center gap-3">
-              <span className="text-[10px] font-bold text-stone-505 uppercase tracking-wider bg-white border border-stone-200/80 px-2.5 py-0.5 rounded-lg select-none">
-                {todaysItems.length} entries
-              </span>
-              <button
-                onClick={() => setIsStatusOpen(!isStatusOpen)}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold text-stone-600 hover:text-stone-900 border border-stone-200 bg-white rounded-lg cursor-pointer transition-colors shadow-3xs"
-              >
-                <LayoutGrid className="w-3 h-3 text-stone-400 animate-pulse" />
-                <span>{isStatusOpen ? 'Hide Stats' : 'Show Stats'}</span>
-              </button>
-            </div>
-          </div>
+      {/* SECTION 2: SUMMARY CARDS LAYOUT */}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div className="ledger-card col-span-2 p-4 lg:col-span-1">
+          <span className="text-xs font-semibold text-[#667085]">Total outgoing</span>
+          <strong className="mt-1 block tabular-nums text-2xl text-[#111827]">{formatInr(dashboard?.totalOutgoingPaise || 0)}</strong>
+          <span className="mt-1 block text-xs text-[#667085]">{dashboard?.paymentCount || 0} payments today</span>
+        </div>
+        <div className="ledger-card p-4">
+          <span className="flex items-center gap-1.5 text-xs font-semibold text-[#667085]"><Banknote size={14} /> Cash</span>
+          <strong className="mt-1 block tabular-nums text-lg text-[#111827]">{formatInr(dashboard?.cashPaise || 0)}</strong>
+          <span className="mt-1 block text-xs text-[#667085]">Physical payments</span>
+        </div>
+        <div className="ledger-card p-4">
+          <span className="flex items-center gap-1.5 text-xs font-semibold text-[#667085]"><CreditCard size={14} /> Bank / digital</span>
+          <strong className="mt-1 block tabular-nums text-lg text-[#111827]">{formatInr(dashboard?.digitalPaise || 0)}</strong>
+          <span className="mt-1 block text-xs text-[#667085]">UPI, bank and cheque</span>
+        </div>
+        <button onClick={() => window.location.assign('/review')} className="ledger-card p-4 text-left hover:border-amber-300 hover:shadow-md">
+          <span className="flex items-center gap-1.5 text-xs font-semibold text-[#667085]"><AlertTriangle size={14} /> Needs review</span>
+          <strong className={`mt-1 block tabular-nums text-lg ${dashboard?.reviewCount ? 'text-amber-700' : 'text-[#111827]'}`}>{dashboard?.reviewCount || 0}</strong>
+          <span className="mt-1 block text-xs text-[#667085]">Open review queue</span>
+        </button>
+      </div>
 
-          <div className="bg-white rounded-xl overflow-hidden shadow-[0_1px_2px_rgba(0,0,0,0.04),0_1px_8px_rgba(0,0,0,0.03)] border border-[#E5E7EB]/50">
-            {todaysItems.length > 0 ? (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse text-xs">
-                  <thead>
-                    <tr className="border-b border-stone-100 bg-stone-50/50 text-stone-500 font-semibold select-none h-11">
-                      <th className="py-2.5 px-5 w-[16%] text-right font-bold">Amount</th>
-                      <th className="py-2.5 px-5 w-[14%] font-bold">Time</th>
-                      <th className="py-2.5 px-5 w-[24%] font-bold">Payee</th>
-                      <th className="py-2.5 px-5 w-[20%] font-bold">Category</th>
-                      <th className="py-2.5 px-5 w-[12%] font-bold">Method</th>
-                      {hasAnyNotes && <th className="py-2.5 px-5 w-[20%] font-bold">Purpose</th>}
-                      <th className="py-2.5 px-5 w-[4%] text-right font-bold"></th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-stone-100/55">
-                    {todaysItems.map((item) => (
-                      <tr
-                        key={item.id}
-                        onClick={() => setSelectedTransaction(item)}
-                        className="hover:bg-stone-50/40 cursor-pointer transition-colors duration-150 group h-14"
-                        title="Click to view detailed audit logs"
-                      >
-                        <td className="py-3.5 px-5 text-right font-mono font-bold text-stone-900 group-hover:text-blue-600 tabular-nums">
-                          {formatInr(item.amountPaise)}
-                        </td>
-                        <td className="py-3.5 px-5 text-stone-550 font-mono font-semibold tabular-nums">
-                          {formatTime12(item.transactionTime)}
-                        </td>
-                        <td className="py-3.5 px-5">
-                          <div className="flex items-center gap-2.5">
-                            <PayeeAvatar name={item.payeeName} size={28} />
-                            <div>
-                              <span className="font-bold text-stone-900 block group-hover:text-[#2563EB] transition-all">
-                                {item.payeeName}
-                              </span>
-                              {item.note && (
-                                <p className="text-[10px] text-stone-400 line-clamp-1 leading-none mt-0.5">
-                                  {item.note}
-                                </p>
-                              )}
-                            </div>
+      {/* SECTION 3: OUTLAY LEDGER TABLE */}
+      <div className="ledger-card bg-white p-0 border border-[#DDE3EC] rounded-2xl overflow-hidden">
+        <div className="p-4 border-b border-[#DDE3EC] flex items-center justify-between bg-white">
+          <div>
+            <h2 className="text-base font-bold text-[#111827]">Today’s transactions</h2>
+            <p className="text-xs text-[#667085] mt-0.5">
+              {todaysItems.length} transactions recorded for {todayDate}
+            </p>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm">
+            <thead className="bg-[#F6F8FC] border-b border-[#DDE3EC] text-xs uppercase font-bold text-[#667085]">
+              <tr>
+                <th className="py-3 px-5 text-right">Amount</th>
+                <th className="py-3 px-5">Time</th>
+                <th className="py-3 px-5">Payee</th>
+                <th className="py-3 px-5">Category</th>
+                <th className="py-3 px-5">Method</th>
+                <th className="py-3 px-5">Status</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#DDE3EC]">
+              {todaysItems.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="py-12 text-center text-[#667085]">
+                    <Inbox size={32} className="mx-auto mb-2 opacity-50" />
+                    <p className="font-semibold">No payments recorded today</p>
+                    <p className="text-xs mt-1">Use the quick entry bar above to log a payment.</p>
+                  </td>
+                </tr>
+              ) : (
+                todaysItems.map((item) => {
+                  return (
+                    <tr
+                      key={item.id}
+                      onClick={() => setSelectedTransaction(item)}
+                      className="hover:bg-[#F6F8FC] cursor-pointer transition-colors group"
+                    >
+                      <td className="py-3 px-4 text-right font-bold text-sm text-[#111827] tabular-nums">
+                        {formatInr(item.amountPaise)}
+                      </td>
+                      <td className="py-3 px-4 text-xs text-[#667085] font-medium whitespace-nowrap">
+                        {formatTime12(item.transactionTime)}
+                      </td>
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-2.5">
+                          <PayeeAvatar name={item.payeeName} size={30} />
+                          <div>
+                            <span className="font-bold text-[#111827] group-hover:text-[#165DFF] transition-colors">
+                              {item.payeeName}
+                            </span>
+                            {item.note && (
+                              <p className="text-xs text-[#667085] line-clamp-1 mt-0.5">
+                                {item.note}
+                              </p>
+                            )}
                           </div>
-                        </td>
-                        <td className="py-3.5 px-5 text-stone-600 font-semibold">
-                          {item.categoryName || (
-                            <span className="text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200/80 text-[10px]">
-                              Review required
-                            </span>
-                          )}
-                        </td>
-                        <td className="py-3.5 px-5">
-                          {item.paymentMethodCode?.toLowerCase() === 'cash' ? (
-                            <span className="bg-amber-50 text-amber-805 rounded-md px-2 py-0.5 font-bold uppercase font-mono text-[9px] border border-amber-100">
-                              CASH
-                            </span>
-                          ) : (
-                            <span className="bg-blue-50 text-blue-805 rounded-md px-2 py-0.5 font-bold uppercase font-mono text-[9px] border border-blue-100">
-                              {item.paymentMethodCode}
-                            </span>
-                          )}
-                        </td>
-                        {hasAnyNotes && (
-                          <td className="py-3.5 px-5 text-stone-500 font-medium truncate max-w-[150px]">
-                            {item.note || <span className="text-stone-300 italic">None</span>}
-                          </td>
-                        )}
-                        <td className="py-3.5 px-5 text-right">
-                          <ChevronRight className="w-3.5 h-3.5 text-stone-300 group-hover:text-blue-600 group-hover:translate-x-0.5 transition-all inline" />
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  {/* Separate Table Total row in the footer */}
-                  <tfoot className="border-t border-stone-200 bg-stone-50/70 font-bold text-stone-900 h-12">
-                    <tr>
-                      <td className="py-2.5 px-5 text-right font-mono tabular-nums">
-                        {formatInr(todaysItems.reduce((sum, item) => sum + item.amountPaise, 0))}
+                        </div>
                       </td>
-                      <td className="py-2.5 px-5" colSpan={hasAnyNotes ? 6 : 5}>
-                        Total Outlays Today ({todaysItems.length} transactions)
+                      <td className="py-3 px-4">
+                        {item.categoryName ? (
+                          <span className="text-sm text-slate-700">{item.categoryName}</span>
+                        ) : (
+                          <span className="px-2.5 py-1 text-xs font-semibold rounded-full bg-amber-100 text-amber-800 border border-amber-200">
+                            Uncategorised
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-3 px-4">
+                        <span className="text-sm text-slate-700">{item.paymentMethodName || 'Cash'}</span>
+                      </td>
+                      <td className="py-3 px-4">
+                        <StatusPill
+                          variant={item.status === 'voided' ? 'gray' : item.needsReview ? 'amber' : 'green'}
+                          label={item.status === 'voided' ? 'Voided' : item.needsReview ? 'Review' : 'Posted'}
+                        />
                       </td>
                     </tr>
-                  </tfoot>
-                </table>
-              </div>
-            ) : (
-              <div className="py-20 px-6 text-center space-y-3 text-stone-400">
-                <Banknote className="w-8 h-8 mx-auto text-stone-300 bg-stone-50 p-2 rounded-full" />
-                <strong className="block text-stone-850 font-bold text-sm">No transactions logged today</strong>
-                <p className="text-xs">Use the quick entry command bar above to record your first ledger item.</p>
-              </div>
-            )}
-          </div>
-        </section>
-
-        {/* Collapsible Desk Status Panel */}
-        {isStatusOpen && (
-          <section className="space-y-3 transition-all duration-300">
-            <div className="pb-1">
-              <h2 className="text-xs font-bold uppercase tracking-wider text-stone-900 flex items-center gap-1.5">
-                <Clock className="w-3.5 h-3.5 text-stone-400" />
-                Desk Status
-              </h2>
-            </div>
-
-            <div className="bg-white rounded-xl p-6 space-y-5 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_1px_8px_rgba(0,0,0,0.03)] border border-stone-100/50">
-              <header className="border-b border-stone-100 pb-3">
-                <span className="text-[10px] uppercase font-bold text-stone-400 block">System Date</span>
-                <strong className="text-base font-bold text-stone-900 block mt-0.5 font-sans">
-                  {todayDate}
-                </strong>
-              </header>
-
-              <dl className="grid grid-cols-2 gap-y-4 text-xs font-semibold text-stone-550">
-                <div>
-                  <dt className="font-bold text-stone-400 mb-0.5">First Entry</dt>
-                  <dd className="text-stone-900 font-mono font-bold">{firstPaymentTime}</dd>
-                </div>
-                <div>
-                  <dt className="font-bold text-stone-400 mb-0.5">Latest Entry</dt>
-                  <dd className="text-stone-900 font-mono font-bold">{latestPaymentTime}</dd>
-                </div>
-                <div>
-                  <dt className="font-bold text-stone-400 mb-0.5">Payees Paid</dt>
-                  <dd className="text-stone-900 font-mono font-bold">{uniquePayees}</dd>
-                </div>
-                <div>
-                  <dt className="font-bold text-stone-400 mb-0.5">Avg Size</dt>
-                  <dd className="text-stone-900 font-mono font-bold tabular-nums">
-                    {formatInr(averagePayment)}
-                  </dd>
-                </div>
-              </dl>
-            </div>
-          </section>
-        )}
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* Modals & Drawers */}
@@ -980,15 +592,6 @@ export default function TodayPage() {
         <DetailedEntryDrawer
           open={detailedOpen}
           onClose={() => setDetailedOpen(false)}
-          master={master!}
-          onSaved={handleRefresh}
-        />
-      )}
-
-      {batchOpen && (
-        <BatchEntryModal
-          open={batchOpen}
-          onClose={() => setBatchOpen(false)}
           master={master!}
           onSaved={handleRefresh}
         />

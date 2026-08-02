@@ -8,9 +8,10 @@ import {
   LedgerTransaction,
   MasterData
 } from '../api/client';
-import { Check, Inbox, RefreshCw, Sparkles, CheckCircle2 } from 'lucide-react';
+import { Check, Inbox, RefreshCw, AlertTriangle, Sparkles, Clock, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { PayeeAvatar } from '../components/common/PayeeAvatar';
+import { StatusPill } from '../components/common/StatusPill';
 
 interface Page {
   items: LedgerTransaction[];
@@ -170,61 +171,52 @@ export default function ReviewPage() {
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-4">
       {/* Title & Actions */}
-      <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-stone-200/40 pb-6">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="sr-only">Review Inbox</h1>
-          <h2 className="text-2xl font-bold tracking-tight text-stone-900 font-sans">
-            Review Queue
-          </h2>
-          <p className="text-xs text-stone-500 mt-1 font-medium">
-            Review missing details and categorize {items.length} pending payments.
-          </p>
+          <h1 className="text-2xl font-bold text-[#111827]">Needs review</h1>
+          <p className="mt-1 text-sm text-[#667085]">Complete missing details for {items.length} payments.</p>
         </div>
 
         <div className="flex items-center gap-3">
           {rememberedCount > 0 && (
-            <div className="px-3.5 py-1.5 bg-[#E9F1FF] border border-[#165DFF]/15 text-[#2563EB] rounded-full text-[10px] font-bold flex items-center gap-1.5 select-none">
-              <Sparkles size={12} />
+            <div className="px-3 py-1.5 bg-[#E9F1FF] border border-[#165DFF]/30 text-[#165DFF] rounded-full text-xs font-bold flex items-center gap-1.5">
+              <Sparkles size={14} />
               <span>{rememberedCount} defaults saved</span>
             </div>
           )}
 
           <button
             onClick={handleRefresh}
-            className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-stone-600 hover:text-stone-900 hover:bg-stone-100/60 border border-stone-200 rounded-lg transition-all duration-150 cursor-pointer bg-white"
+            className="btn btn-secondary h-10 px-3 text-[#667085] hover:text-[#111827]"
             title="Refresh review inbox"
           >
-            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+            <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
           </button>
 
           {items.length > 0 && (
             <button
               onClick={handleBulkResolve}
               disabled={bulkProcessing}
-              className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold bg-[#F79009] hover:bg-[#E28007] text-white rounded-lg shadow-sm hover:shadow transition-all duration-150 cursor-pointer border-none disabled:opacity-50 disabled:cursor-not-allowed"
+              className="btn btn-primary h-10 px-4 gap-2 bg-[#F79009] hover:bg-[#D97706] border-none shadow-xs"
             >
-              <CheckCircle2 size={14} />
+              <CheckCircle2 size={16} />
               <span>{bulkProcessing ? 'Processing...' : 'Resolve all ready items'}</span>
             </button>
           )}
         </div>
-      </header>
+      </div>
 
       {/* Review List */}
-      <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.02),0_4px_16px_rgba(0,0,0,0.02)] border border-stone-100/50 divide-y divide-stone-100/50 overflow-hidden">
+      <div className="overflow-hidden rounded-2xl border border-[#DDE3EC] bg-white shadow-[var(--shadow-card)] divide-y divide-[#DDE3EC]">
         {items.length === 0 ? (
-          <div className="py-20 text-center text-stone-400 space-y-4">
-            <span className="w-10 h-10 mx-auto rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
-              <Inbox className="w-5 h-5" />
-            </span>
-            <div>
-              <strong className="block text-stone-850 font-bold text-sm">Review inbox is empty</strong>
-              <p className="text-xs text-stone-500 mt-1">
-                All incoming payments have been categorized and confirmed. Great work!
-              </p>
-            </div>
+          <div className="p-12 text-center text-[#667085]">
+            <Inbox size={40} className="mx-auto mb-3 text-emerald-500" />
+            <h3 className="text-lg font-bold text-[#111827]">Review inbox is empty</h3>
+            <p className="text-xs mt-1 text-[#667085]">
+              All incoming payments have been categorized and confirmed. Great work!
+            </p>
           </div>
         ) : (
           items.map((item) => {
@@ -236,30 +228,26 @@ export default function ReviewPage() {
             return (
               <div
                 key={item.id}
-                className={`p-5 transition-colors hover:bg-stone-50/40 ${
-                  isAged ? 'border-l-4 border-l-amber-500/80' : ''
-                }`}
+                className={`bg-white px-4 py-3 transition-colors hover:bg-slate-50 ${isAged ? 'border-l-2 border-l-[#F79009]' : ''}`}
               >
-                <div className="grid grid-cols-1 items-center gap-4 lg:grid-cols-[minmax(240px,1fr)_130px_minmax(390px,auto)]">
+                <div className="grid grid-cols-1 items-center gap-3 lg:grid-cols-[minmax(240px,1fr)_130px_minmax(390px,auto)]">
                   {/* Left: Transaction Info */}
                   <div className="flex min-w-0 items-center gap-3">
-                    <PayeeAvatar name={item.payeeName} size={28} />
+                    <PayeeAvatar name={item.payeeName} size={32} />
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className="truncate font-bold text-stone-900 text-sm leading-normal">{item.payeeName}</span>
+                        <span className="truncate font-semibold text-[#111827]">{item.payeeName}</span>
                         {isAged && (
-                          <span className="px-1.5 py-0.5 rounded bg-amber-50 border border-amber-200/60 text-[9px] font-bold text-amber-800 uppercase tracking-wide shrink-0">
-                            over 7 days
-                          </span>
+                          <span className="text-[11px] font-medium text-amber-700">· over 7 days</span>
                         )}
                       </div>
 
-                      <div className="mt-1 text-[10px] font-bold text-stone-450 uppercase">
-                        {item.transactionDate} · {formatTime12(item.transactionTime)} · {item.source}
+                      <div className="mt-0.5 text-xs text-[#667085]">
+                        {item.transactionDate} · {formatTime12(item.transactionTime)} · {item.source.charAt(0).toUpperCase() + item.source.slice(1)}
                       </div>
 
                       {item.note && (
-                        <p className="mt-1 text-xs text-stone-500 truncate max-w-[280px]">
+                        <p className="mt-0.5 truncate text-xs text-slate-600">
                           {item.note}
                         </p>
                       )}
@@ -267,22 +255,22 @@ export default function ReviewPage() {
                   </div>
 
                   {/* Middle: Right-Aligned Amount */}
-                  <div className="text-left lg:text-right font-black text-stone-950 text-base tabular-nums">
-                    {formatInr(item.amountPaise)}
+                  <div className="text-left lg:text-right">
+                    <span className="text-base font-bold tabular-nums text-[#111827]">
+                      {formatInr(item.amountPaise)}
+                    </span>
                   </div>
 
-                  {/* Right: Selectors & Resolve Action */}
-                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 select-none">
+                  {/* Right: Selectors & Resolve Action (Disabled until category selected) */}
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                     {/* Category Selector */}
                     <div className="w-full sm:w-40">
                       <select
                         value={draft.categoryId}
                         onChange={(e) => handleDraftChange(item.id, 'categoryId', e.target.value)}
                         aria-label={`Category for ${item.payeeName}`}
-                        className={`w-full h-9 px-3 text-xs font-semibold rounded-lg border bg-white outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all ${
-                          !draft.categoryId 
-                            ? 'border-amber-300 bg-amber-50/20 text-amber-900 focus:border-amber-400' 
-                            : 'border-stone-200 text-stone-900'
+                        className={`form-input text-xs font-medium h-9 ${
+                          !draft.categoryId ? 'border-amber-400 bg-amber-50/50' : ''
                         }`}
                       >
                         <option value="">Category…</option>
@@ -300,7 +288,7 @@ export default function ReviewPage() {
                         value={draft.methodId}
                         onChange={(e) => handleDraftChange(item.id, 'methodId', e.target.value)}
                         aria-label={`Payment method for ${item.payeeName}`}
-                        className="w-full h-9 px-3 text-xs font-semibold rounded-lg border border-stone-200 bg-white text-stone-900 outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all"
+                        className="form-input text-xs font-medium h-9"
                       >
                         {master?.paymentMethods.map((m) => (
                           <option key={m.id} value={m.id.toString()}>
@@ -311,31 +299,31 @@ export default function ReviewPage() {
                     </div>
 
                     {/* Promoted Remember Mapping */}
-                    <div className="flex items-center gap-2 self-center shrink-0">
+                    <div className="flex items-center gap-1.5 self-center">
                       <input
                         type="checkbox"
                         id={`rem-${item.id}`}
                         checked={draft.remember}
                         onChange={(e) => handleDraftChange(item.id, 'remember', e.target.checked)}
-                        className="w-4 h-4 rounded border-stone-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                        className="w-4 h-4 rounded border-[#DDE3EC] text-[#165DFF]"
                       />
-                      <label htmlFor={`rem-${item.id}`} className="text-xs font-semibold text-stone-500 cursor-pointer select-none">
+                      <label htmlFor={`rem-${item.id}`} className="text-xs font-medium text-slate-700 cursor-pointer select-none">
                         Use next time
                       </label>
                     </div>
 
-                    {/* Resolve Button */}
+                    {/* Resolve Button (Section 4.4 Spec: Disabled until category chosen) */}
                     <button
                       onClick={() => handleResolve(item)}
                       disabled={!isValid || isResolving}
-                      className={`h-9 px-4 rounded-lg flex items-center justify-center gap-1.5 text-xs font-bold transition-all border-none shrink-0 ${
+                      className={`btn h-9 px-4 gap-1.5 text-xs font-bold transition-all ${
                         isValid
-                          ? 'bg-[#00B96B] hover:bg-[#009E5B] text-white shadow-3xs cursor-pointer'
-                          : 'bg-stone-100 text-stone-400 cursor-not-allowed'
+                          ? 'btn-primary bg-[#00B96B] hover:bg-[#009E5B]'
+                          : 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
                       }`}
                       title={!isValid ? 'Select a category to enable resolve' : 'Confirm and resolve payment'}
                     >
-                      <Check size={14} />
+                      <Check size={16} />
                       <span>{isResolving ? 'Resolving...' : 'Resolve'}</span>
                     </button>
                   </div>
