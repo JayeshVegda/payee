@@ -1,35 +1,64 @@
-# Payment Ledger
+# Payment Desk
 
-Private, single-user INR payment tracking for daily business operations. The production application is one Node.js process serving a static Svelte SPA and Hono API at `http://127.0.0.1:4782`.
+Private, single-user INR payment tracking for a local Windows workstation. The production app is one Node.js process serving the React frontend and Hono API at:
 
-## Requirements
+`http://127.0.0.1:4782`
 
-- Node.js `24.18.1`
-- pnpm `11.18.0`
-- Windows 10/11 x64 or a supported x64 Linux development environment
+It stores data locally in SQLite. It does not require Docker, PostgreSQL, Redis, a cloud service, or a separate frontend server.
 
-The development machine can activate the exact tools with `mise install`.
+## Production setup on Windows
 
-## Commands
+Requirements: Node.js 24 LTS x64 and pnpm 11.18.0.
 
-```bash
-mise install
-mise exec -- pnpm install --frozen-lockfile
-mise exec -- pnpm dev
-mise exec -- pnpm build
-mise exec -- pnpm start
-mise exec -- pnpm db:migrate
-mise exec -- pnpm db:backup
-mise exec -- pnpm test
-mise exec -- pnpm test:e2e
+From the project directory in PowerShell:
+
+```powershell
+.\scripts\setup-windows.ps1
+.\scripts\start-production.ps1
 ```
 
-Development serves the UI on `127.0.0.1:4782` and proxies API calls to a loopback-only Hono process on port `4783`. Production serves everything from one process on port `4782`.
+Then open `http://127.0.0.1:4782`. To start it automatically when Windows logs in:
 
-Development data defaults to `./data`. Windows production uses `%LOCALAPPDATA%\PaymentLedger` through `scripts/start-production.ps1`. See [Windows deployment](docs/WINDOWS_DEPLOYMENT.md) and [backup and restore](docs/BACKUP_AND_RESTORE.md).
+```powershell
+.\scripts\setup-windows-task.ps1
+```
 
-## Current status
+Verify the running instance with:
 
-The local website includes master data, smart and manual capture, favourites and frequent payees, a searchable ledger, audited corrections and void/undo, review queue, cash-first reports, CSV/print, unusual and repeated-payment analysis, plus verified backup tooling. Telegram is deliberately not implemented.
+```powershell
+.\scripts\verify-production.ps1
+```
 
-The custom Payment Desk frontend uses Skeleton 4 theme tokens with Tailwind CSS 4, Ark UI behavior primitives, TanStack Table v8, lazy LayerChart 2 reports, Fuse.js payee search, Sonner notifications, and Lucide icons. It does not use shadcn or a premade admin template.
+The database and backups are stored under `%LOCALAPPDATA%\PaymentLedger`. Never delete that directory during an upgrade.
+
+## Development commands
+
+```bash
+pnpm install --frozen-lockfile
+pnpm dev
+pnpm check
+pnpm test
+pnpm build
+pnpm smoke
+pnpm db:backup
+```
+
+Use `pnpm dev` only on the development computer. Use the compiled production build on the 4 GB workstation.
+
+## Architecture
+
+- `apps/web-react`: React SPA, routing, keyboard-first payment desk, reports and system views.
+- `apps/server`: Hono API, static-file serving, Telegram companion, and process lifecycle.
+- `packages/core`: transaction services and business rules.
+- `packages/database`: better-sqlite3, Kysely types, migrations, repositories, backups.
+- `packages/parser`: deterministic Indian amount/payee/payment parser.
+- `packages/shared`: shared contracts and utility types.
+- `migrations`: plain SQL migrations applied in order.
+
+The backend remains the authority for payment writes, audit history, review state, and money calculations. All amounts are integer paise.
+
+## Production reliability defaults
+
+The browser caches ordinary queries for one minute; the Ledger refreshes every 30 seconds while open. Reports, Activity, and System are on-demand. Telegram checks for new transactions every 15 seconds and scheduled summaries every 30 seconds. Request logging is quiet unless `PAYMENT_LEDGER_LOG_LEVEL=info` or `debug` is selected.
+
+Read [docs/PRODUCTION_SETUP.md](docs/PRODUCTION_SETUP.md), [docs/PROJECT_OVERVIEW.md](docs/PROJECT_OVERVIEW.md), and [docs/AI_CONTEXT.md](docs/AI_CONTEXT.md) before operating or extending the project.

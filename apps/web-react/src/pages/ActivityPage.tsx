@@ -1,9 +1,10 @@
-import React, { useState, useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { api, formatInr } from '../api/client';
-import { RefreshCw, PlusCircle, Edit3, Trash2, History, Inbox } from 'lucide-react';
+import { api, formatInr, post } from '../api/client';
+import { Edit3, Trash2, Inbox, ChevronLeft, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
-import { SegmentedTabs } from '../components/common/SegmentedTabs';
+import { TransactionDrawer } from '../components/common/TransactionDrawer';
+import { ConfirmModal } from '../components/common/ConfirmModal';
 
 interface Event {
   id: number;
@@ -16,164 +17,168 @@ interface Event {
 }
 
 export default function ActivityPage() {
-  const [filterAction, setFilterAction] = useState<string>('all');
+  const [selectedTx, setSelectedTx] = useState<any | null>(null);
+  const [deleteConfirmTx, setDeleteConfirmTx] = useState<any | null>(null);
+  const [page, setPage] = useState(1);
+  const pageSize = 20;
 
-  const { data: events = [], isLoading, refetch } = useQuery<Event[]>({
+  const { data: events = [], refetch } = useQuery<Event[]>({
     queryKey: ['activity-events'],
     queryFn: () => api<Event[]>('/activity?limit=200')
   });
 
-  const handleRefresh = async () => {
-    await refetch();
-    toast.success('Activity log refreshed');
+  const pageCount = Math.max(1, Math.ceil(events.length / pageSize));
+  const visibleEvents = useMemo(() => events.slice((page - 1) * pageSize, page * pageSize), [events, page]);
+
+  const handleEdit = async (transactionId: number) => {
+    try {
+      const tx = await api<any>(`/transactions/${transactionId}`);
+      setSelectedTx(tx);
+    } catch {
+      toast.error('Failed to load transaction details');
+    }
   };
 
-  // Filter events by selected action type
-  const filteredEvents = useMemo(() => {
-    if (filterAction === 'all') return events;
-    return events.filter((e) => e.action.toLowerCase() === filterAction.toLowerCase());
-  }, [events, filterAction]);
-
-  // Group events by Day (Section 4.7 Spec: "Today", "Yesterday", or formatted date)
-  const groupedEvents = useMemo(() => {
-    const groups: Record<string, Event[]> = {};
-    const todayStr = new Date().toISOString().slice(0, 10);
-    const yesterdayDate = new Date();
-    yesterdayDate.setDate(yesterdayDate.getDate() - 1);
-    const yesterdayStr = yesterdayDate.toISOString().slice(0, 10);
-
-    filteredEvents.forEach((event) => {
-      const dateStr = event.changedAt.slice(0, 10);
-      let groupKey = dateStr;
-      if (dateStr === todayStr) {
-        groupKey = 'Today';
-      } else if (dateStr === yesterdayStr) {
-        groupKey = 'Yesterday';
-      } else {
-        groupKey = new Date(dateStr).toLocaleDateString('en-IN', {
-          day: 'numeric',
-          month: 'long',
-          year: 'numeric'
-        });
-      }
-
-      if (!groups[groupKey]) {
-        groups[groupKey] = [];
-      }
-      groups[groupKey]!.push(event);
-    });
-
-    return groups;
-  }, [filteredEvents]);
-
-  const tabs = [
-    { id: 'all', label: 'All Actions' },
-    { id: 'create', label: 'Created' },
-    { id: 'correct', label: 'Edited' },
-    { id: 'void', label: 'Voided' },
-  ];
 
   return (
-    <div className="space-y-6">
-      {/* Title & Actions */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-[#111827]">Activity</h1>
-          <p className="mt-1 text-sm text-[#667085]">Created, edited, and voided payments.</p>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <button
-            onClick={handleRefresh}
-            className="btn btn-secondary h-10 px-3 text-[#667085] hover:text-[#111827]"
-            title="Refresh activity log"
-          >
-            <RefreshCw size={16} className={isLoading ? 'animate-spin' : ''} />
-          </button>
-        </div>
-      </div>
-
-      {/* Segmented Action Filter Control */}
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <SegmentedTabs
-          options={tabs}
-          activeId={filterAction}
-          onChange={(id) => setFilterAction(id)}
-        />
-      </div>
-
-      {/* Grouped Day-by-Day Activity Stream */}
-      <div className="space-y-6">
-        {Object.keys(groupedEvents).length === 0 ? (
-          <div className="ledger-card bg-white p-12 text-center text-[#667085] rounded-2xl border border-[#DDE3EC]">
-            <Inbox size={40} className="mx-auto mb-2 opacity-50" />
-            <h3 className="text-lg font-bold text-[#111827]">No activity logs found</h3>
-            <p className="text-xs mt-1 text-[#667085]">
-              Recorded creation, modification, or void events will appear here.
-            </p>
-          </div>
-        ) : (
-          Object.entries(groupedEvents).map(([dateGroup, items]) => (
-            <div key={dateGroup} className="space-y-2">
-              {/* Sticky Date Header */}
-              <div className="sticky top-[56px] z-10 py-2 px-1 bg-[#F6F8FC] backdrop-blur-xs font-bold text-xs uppercase tracking-wider text-[#667085]">
-                {dateGroup} ({items.length})
-              </div>
-
-              <div className="ledger-card bg-white p-0 border border-[#DDE3EC] rounded-2xl shadow-xs overflow-hidden divide-y divide-[#DDE3EC]">
-                {items.map((event) => {
-                  const isVoid = event.action === 'void';
-                  const isCorrect = event.action === 'correct';
+    <div className="space-y-4">
+      <h1 className="sr-only">Activity</h1>
+      {/* Flat Simple Table (Compact one-liner) */}
+      <div className="ledger-card bg-white p-0 border border-[#DDE3EC] rounded-2xl shadow-xs overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm">
+            <thead className="bg-[#F6F8FC] border-b border-[#DDE3EC] text-xs uppercase font-bold text-[#667085]">
+              <tr>
+                <th className="py-3 px-4">Date & Time</th>
+                <th className="py-3 px-4">Action</th>
+                <th className="py-3 px-4">Payee</th>
+                <th className="py-3 px-4 text-right">Amount</th>
+                <th className="py-3 px-4">Source</th>
+                <th className="py-3 px-4 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#DDE3EC]">
+              {events.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="py-12 text-center text-[#667085]">
+                    <Inbox size={32} className="mx-auto mb-2 opacity-50" />
+                    <p className="font-semibold text-base">No activity logs found</p>
+                  </td>
+                </tr>
+              ) : (
+                visibleEvents.map((event) => {
+                  const isVoid = event.action === 'void' || event.action === 'voided';
+                  const isCorrect = event.action === 'correct' || event.action === 'corrected';
+                  const localTime = new Date(event.changedAt).toLocaleString('en-IN', {
+                    dateStyle: 'short',
+                    timeStyle: 'short',
+                    timeZone: 'Asia/Kolkata'
+                  });
 
                   return (
-                    <div
-                      key={event.id}
-                      className="p-4 flex items-center justify-between gap-4 hover:bg-[#F6F8FC] transition-colors"
-                    >
-                      <div className="flex items-center gap-3">
-                        {/* Action-Type Icon (Section 4.7 Spec) */}
-                        <div
-                          className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${
+                    <tr key={event.id} className="hover:bg-slate-50 transition-colors">
+                      <td className="py-2.5 px-4 text-xs font-medium text-[#667085] whitespace-nowrap">
+                        {localTime}
+                      </td>
+                      <td className="py-2.5 px-4 whitespace-nowrap">
+                        <span
+                          className={`px-2 py-0.5 text-[10px] font-bold uppercase rounded-full ${
                             isVoid
-                              ? 'bg-rose-100 text-rose-700'
+                              ? 'bg-rose-50 text-rose-700 border border-rose-200'
                               : isCorrect
-                              ? 'bg-amber-100 text-amber-800'
-                              : 'bg-[#E9F1FF] text-[#165DFF]'
+                              ? 'bg-amber-50 text-amber-800 border border-amber-200'
+                              : 'bg-blue-50 text-blue-700 border border-blue-200'
                           }`}
                         >
-                          {isVoid ? (
-                            <Trash2 size={16} />
-                          ) : isCorrect ? (
-                            <Edit3 size={16} />
-                          ) : (
-                            <PlusCircle size={16} />
-                          )}
-                        </div>
-
-                        <div>
-                          <strong className="text-sm font-bold text-[#111827] block">
-                            {event.payeeName} · <span className="capitalize">{event.action === 'create' ? 'Created' : event.action === 'correct' ? 'Edited' : 'Voided'}</span>
-                          </strong>
-                          <div className="text-xs text-[#667085] mt-0.5 font-medium">
-                            {new Date(event.changedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })} ·{' '}
-                            <span className="font-mono uppercase">{event.source}</span> · Tx #{event.transactionId}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Right-Aligned Tabular Amount */}
-                      <span className="font-extrabold tabular-nums text-base text-[#111827] shrink-0">
+                          {event.action === 'create' || event.action === 'created' ? 'Created' : isCorrect ? 'Edited' : isVoid ? 'Voided' : event.action}
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-4 font-bold text-slate-800 text-sm whitespace-nowrap">
+                        {event.payeeName}
+                      </td>
+                      <td className="py-2.5 px-4 text-right font-bold tabular-nums text-slate-800 text-sm whitespace-nowrap">
                         {isVoid && <span className="line-through text-rose-500 mr-2">{formatInr(event.amountPaise)}</span>}
                         {!isVoid && formatInr(event.amountPaise)}
-                      </span>
-                    </div>
+                      </td>
+                      <td className="py-2.5 px-4 text-xs font-mono uppercase text-[#667085]">
+                        {event.source}
+                      </td>
+                      <td className="py-2.5 px-4 text-right whitespace-nowrap">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            onClick={() => handleEdit(event.transactionId)}
+                            className="p-1 text-slate-500 hover:text-[#165DFF] hover:bg-[#E9F1FF] rounded transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                            title="Edit transaction"
+                            disabled={isVoid}
+                          >
+                            <Edit3 size={14} />
+                          </button>
+                          <button
+                            onClick={() => setDeleteConfirmTx(event)}
+                            className="p-1 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                            title="Void transaction"
+                            disabled={isVoid}
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
                   );
-                })}
-              </div>
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+        {events.length > 0 && (
+          <div className="flex items-center justify-between border-t border-[#DDE3EC] bg-[#FAFBFD] px-4 py-3 text-xs text-[#667085]">
+            <span>{(page - 1) * pageSize + 1}–{Math.min(page * pageSize, events.length)} of {events.length} changes</span>
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={() => setPage((value) => Math.max(1, value - 1))} disabled={page === 1} className="flex h-8 w-8 items-center justify-center rounded-lg border border-[#DDE3EC] bg-white hover:border-[#165DFF] hover:text-[#165DFF] disabled:opacity-40" aria-label="Previous activity page"><ChevronLeft size={15} /></button>
+              <span className="min-w-20 text-center font-semibold text-[#344054]">Page {page} of {pageCount}</span>
+              <button type="button" onClick={() => setPage((value) => Math.min(pageCount, value + 1))} disabled={page === pageCount} className="flex h-8 w-8 items-center justify-center rounded-lg border border-[#DDE3EC] bg-white hover:border-[#165DFF] hover:text-[#165DFF] disabled:opacity-40" aria-label="Next activity page"><ChevronRight size={15} /></button>
             </div>
-          ))
+          </div>
         )}
       </div>
+
+      {/* Transaction Detail Drawer */}
+      <TransactionDrawer
+        transaction={selectedTx}
+        initialEdit={true}
+        onClose={() => {
+          setSelectedTx(null);
+          refetch();
+        }}
+      />
+
+      {/* Deletion Confirmation Modal */}
+      <ConfirmModal
+        isOpen={!!deleteConfirmTx}
+        title="Void this Transaction?"
+        description="Voiding this transaction is permanent. Review details below before continuing."
+        type="danger"
+        confirmText="Void Transaction"
+        previewData={deleteConfirmTx ? {
+          'Transaction ID': `#${deleteConfirmTx.transactionId}`,
+          'Payee': deleteConfirmTx.payeeName || 'Unknown',
+          'Amount': formatInr(deleteConfirmTx.amountPaise || 0),
+          'Action Date': deleteConfirmTx.changedAt ? new Date(deleteConfirmTx.changedAt).toLocaleString('en-IN') : 'Unknown'
+        } : undefined}
+        onConfirm={async () => {
+          if (!deleteConfirmTx) return;
+          try {
+            await post(`/transactions/${deleteConfirmTx.transactionId}/void`, { reason: 'Voided from Activity Log' });
+            toast.success('Transaction voided successfully');
+            refetch();
+          } catch (err: any) {
+            toast.error(err.message || 'Failed to void transaction');
+          } finally {
+            setDeleteConfirmTx(null);
+          }
+        }}
+        onCancel={() => setDeleteConfirmTx(null)}
+      />
     </div>
   );
 }

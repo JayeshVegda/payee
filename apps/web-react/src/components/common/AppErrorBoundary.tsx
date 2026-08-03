@@ -4,17 +4,17 @@ import { AlertTriangle, RefreshCw } from 'lucide-react';
 type State = { error: Error | null };
 
 export class AppErrorBoundary extends React.Component<React.PropsWithChildren, State> {
-  state: State = { error: null };
+  override state: State = { error: null };
 
   static getDerivedStateFromError(error: Error): State {
     return { error };
   }
 
-  componentDidCatch(error: Error): void {
+  override componentDidCatch(error: Error): void {
     console.error('Payment Ledger render failed', error);
   }
 
-  render(): React.ReactNode {
+  override render(): React.ReactNode {
     if (!this.state.error) return this.props.children;
     return (
       <main className="min-h-screen bg-bg-page grid place-items-center p-6">

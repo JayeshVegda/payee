@@ -38,6 +38,14 @@ export class TransactionConflictError extends Error {
   override name = 'TransactionConflictError';
 }
 
+export class DuplicateTransactionError extends Error {
+  override name = 'DuplicateTransactionError';
+}
+
+export class NewPayeeRequiresConfirmationError extends Error {
+  override name = 'NewPayeeRequiresConfirmationError';
+}
+
 export class TransactionService {
   constructor(private readonly transactions: TransactionRepository) {}
 

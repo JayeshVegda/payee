@@ -1,6 +1,7 @@
 import { serve } from '@hono/node-server';
 import { openDatabase } from '@payment-ledger/database';
 import { createApp } from './app.js';
+import { startTelegramCompanion } from './telegram.js';
 
 const production = process.env.NODE_ENV === 'production';
 const portArgument = process.argv.find((argument) => argument.startsWith('--port='));
@@ -18,9 +19,7 @@ const app = createApp({
   ...(process.env.PAYMENT_LEDGER_EXPECTED_ORIGIN
     ? { expectedOrigin: process.env.PAYMENT_LEDGER_EXPECTED_ORIGIN }
     : {}),
-  ...(process.env.PAYMENT_LEDGER_LOG_LEVEL
-    ? { logLevel: process.env.PAYMENT_LEDGER_LOG_LEVEL }
-    : {})
+  logLevel: process.env.PAYMENT_LEDGER_LOG_LEVEL ?? (production ? 'warn' : 'info')
 });
 
 const server = serve({ fetch: app.fetch, hostname, port }, (info) => {
@@ -28,6 +27,7 @@ const server = serve({ fetch: app.fetch, hostname, port }, (info) => {
     `${JSON.stringify({ timestamp: new Date().toISOString(), level: 'info', message: 'server_started', url: `http://${hostname}:${info.port}` })}\n`
   );
 });
+const telegram = startTelegramCompanion(runtime);
 
 let stopping = false;
 async function shutdown(signal: string): Promise<void> {
@@ -37,6 +37,7 @@ async function shutdown(signal: string): Promise<void> {
     `${JSON.stringify({ timestamp: new Date().toISOString(), level: 'info', message: 'server_stopping', signal })}\n`
   );
   server.close(async () => {
+    await telegram?.stop();
     await runtime.close();
     process.exitCode = 0;
   });

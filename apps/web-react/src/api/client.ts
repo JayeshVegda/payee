@@ -10,6 +10,7 @@ export interface Payee {
   aliases: string[];
   paymentCount: number;
   totalPaidPaise: number;
+  thisMonthPaidPaise: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -76,6 +77,13 @@ export interface QuickPreview {
   warnings: string[];
 }
 
+export interface QuickSaveResult {
+  transaction: LedgerTransaction;
+  duplicate: boolean;
+  duplicateReason: string | null;
+  createdPayee: boolean;
+}
+
 export interface DashboardData {
   date: string;
   totalOutgoingPaise: number;
@@ -83,6 +91,11 @@ export interface DashboardData {
   cashPaise: number;
   digitalPaise: number;
   reviewCount: number;
+  uniquePayeeCount: number;
+  largestPaymentPaise: number;
+  monthTotalPaise: number;
+  previousMonthTotalPaise: number;
+  averageActiveDayPaise: number;
   recent: LedgerTransaction[];
   frequent: Array<{
     id: number;
@@ -128,6 +141,17 @@ export interface AuditEntry {
   userId: number | null;
 }
 
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    public readonly code: string,
+    public readonly status: number
+  ) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
+
 export function formatTime12(value: string): string {
   const match = /^(\d{2}):(\d{2})/.exec(value);
   if (!match) return value;
@@ -145,9 +169,12 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`/api${path}`, { ...init, headers });
   if (!response.ok) {
     const payload = (await response.json().catch(() => null)) as {
-      error?: { message?: string };
+      error?: { code?: string; message?: string } | string;
     } | null;
-    throw new Error(payload?.error?.message ?? `Request failed (${response.status})`);
+    const error = payload?.error;
+    const message = typeof error === 'string' ? error : error?.message;
+    const code = typeof error === 'string' ? 'REQUEST_FAILED' : error?.code;
+    throw new ApiError(message ?? `Request failed (${response.status})`, code ?? 'REQUEST_FAILED', response.status);
   }
   return response.json() as Promise<T>;
 }
@@ -158,6 +185,10 @@ export function post<T>(path: string, body: unknown): Promise<T> {
 
 export function patch<T>(path: string, body: unknown): Promise<T> {
   return api<T>(path, { method: 'PATCH', body: JSON.stringify(body) });
+}
+
+export function del<T>(path: string): Promise<T> {
+  return api<T>(path, { method: 'DELETE' });
 }
 
 export function formatInr(paise: number): string {

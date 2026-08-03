@@ -57,14 +57,14 @@ describe('server app', () => {
     runtimes.push(runtime);
     const app = createApp({
       runtime,
-      expectedHost: 'payee.zayu.dev',
-      expectedOrigin: 'https://payee.zayu.dev',
+      expectedHost: 'ledger.local',
+      expectedOrigin: 'https://ledger.local',
       webBuildDirectory: directory,
       logLevel: 'silent'
     });
     const response = await app.request('/api/missing', {
       method: 'POST',
-      headers: { host: 'payee.zayu.dev', origin: 'https://payee.zayu.dev' }
+      headers: { host: 'ledger.local', origin: 'https://ledger.local' }
     });
     expect(response.status).toBe(404);
   });

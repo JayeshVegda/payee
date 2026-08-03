@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api, post } from '../api/client';
-import { ShieldCheck, Database, HardDrive, RefreshCw, AlertTriangle, CheckCircle2, DownloadCloud } from 'lucide-react';
+import { AlertTriangle, Bot, CheckCircle2, Database, DownloadCloud, HardDrive, ShieldCheck, Users } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface Status {
@@ -16,26 +16,32 @@ interface Status {
   counts: { total: number; posted: number; voided: number; review: number };
   payeeCount: number;
   lastActivity: string | null;
+  telegram: {
+    enabled: boolean;
+    configured: boolean;
+    status: 'active' | 'incomplete' | 'disabled';
+    summaryTimes: string;
+    lastForwardedTransactionId: number;
+    lastSummary6Date: string | null;
+    lastSummary8Date: string | null;
+    panelVersion: string | null;
+  };
 }
+
+const formatSize = (bytes: number) => `${(bytes / 1024 / 1024).toFixed(2)} MB`;
 
 export default function SystemPage() {
   const [backingUp, setBackingUp] = useState(false);
-
-  const { data: status, isLoading, refetch, isError } = useQuery<Status>({
+  const { data: status, isError, refetch } = useQuery<Status>({
     queryKey: ['system-status'],
     queryFn: () => api<Status>('/system/status')
   });
-
-  const handleRefresh = async () => {
-    await refetch();
-    toast.success('System dashboard refreshed');
-  };
 
   const handleBackup = async () => {
     setBackingUp(true);
     try {
       const result = await post<{ filename: string }>('/system/backup', {});
-      toast.success('Backup created and verified!', { description: result.filename });
+      toast.success('Backup created and verified', { description: result.filename });
       await refetch();
     } catch (caught) {
       toast.error(caught instanceof Error ? caught.message : 'Backup failed');
@@ -44,158 +50,80 @@ export default function SystemPage() {
     }
   };
 
-  const formatSize = (bytes: number) => `${(bytes / 1024 / 1024).toFixed(2)} MB`;
+  if (isError) return <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-800">System status is unavailable.</div>;
+  if (!status) return <div className="grid grid-cols-3 gap-3">{[1, 2, 3].map((item) => <div key={item} className="h-32 animate-pulse rounded-2xl bg-white" />)}</div>;
 
-  // Status Banner Logic (Section 4.6 Spec)
-  const isHealthy = status?.integrity === 'ok';
-  const isBackupOverdue = status?.lastBackup
-    ? (new Date().getTime() - new Date(status.lastBackup.modifiedAt).getTime()) > 7 * 24 * 3600 * 1000
-    : true;
+  const healthy = status.integrity === 'ok' && status.foreignKeys && status.journalMode.toLowerCase() === 'wal';
+  const reviewRate = status.counts.posted ? (status.counts.review / status.counts.posted) * 100 : 0;
+  const lastBackupAge = status.lastBackup ? Math.floor((Date.now() - new Date(status.lastBackup.modifiedAt).getTime()) / 86400000) : null;
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-[#111827]">System</h1>
-          <p className="mt-1 text-sm text-[#667085]">Database health and backups.</p>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <button
-            onClick={handleRefresh}
-            className="btn btn-secondary h-10 px-3 text-[#667085] hover:text-[#111827]"
-            title="Refresh system status"
-          >
-            <RefreshCw size={16} className={isLoading ? 'animate-spin' : ''} />
-          </button>
-
-          <button
-            onClick={handleBackup}
-            disabled={backingUp}
-            className="btn btn-primary h-10 px-4 gap-2 shadow-xs"
-          >
-            <DownloadCloud size={16} className={backingUp ? 'animate-spin' : ''} />
-            <span>{backingUp ? 'Backing up...' : 'Back Up Now'}</span>
-          </button>
-        </div>
+    <div className="space-y-3">
+      <h1 className="sr-only">System</h1>
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+        <article className="ledger-card p-4">
+          <div className="flex items-center justify-between"><span className="text-xs font-semibold text-[#667085]">Database</span><Database size={17} className="text-[#165DFF]" /></div>
+          <strong className="mt-3 block text-xl text-[#111827]">{healthy ? 'Healthy' : 'Attention needed'}</strong>
+          <p className="mt-1 text-xs text-[#667085]">{status.journalMode.toUpperCase()} · integrity {status.integrity}</p>
+        </article>
+        <article className="ledger-card p-4">
+          <div className="flex items-center justify-between"><span className="text-xs font-semibold text-[#667085]">Transactions</span><CheckCircle2 size={17} className="text-[#165DFF]" /></div>
+          <strong className="mt-3 block text-xl tabular-nums text-[#111827]">{status.counts.total.toLocaleString('en-IN')}</strong>
+          <p className="mt-1 text-xs text-[#667085]">{status.counts.posted} posted · {status.counts.voided} voided</p>
+        </article>
+        <article className="ledger-card p-4">
+          <div className="flex items-center justify-between"><span className="text-xs font-semibold text-[#667085]">Payees</span><Users size={17} className="text-[#165DFF]" /></div>
+          <strong className="mt-3 block text-xl tabular-nums text-[#111827]">{status.payeeCount.toLocaleString('en-IN')}</strong>
+          <p className="mt-1 text-xs text-[#667085]">{status.counts.review} review items · {reviewRate.toFixed(1)}%</p>
+        </article>
+        <article className="ledger-card p-4">
+          <div className="flex items-center justify-between"><span className="text-xs font-semibold text-[#667085]">Storage</span><HardDrive size={17} className="text-[#165DFF]" /></div>
+          <strong className="mt-3 block text-xl tabular-nums text-[#111827]">{formatSize(status.databaseSizeBytes)}</strong>
+          <p className="mt-1 truncate text-xs text-[#667085]" title={status.databasePath}>{status.databasePath}</p>
+        </article>
       </div>
 
-      {isError && (
-        <div className="p-4 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-sm font-semibold flex items-center gap-2">
-          <AlertTriangle size={18} />
-          <span>Failed to fetch system status. Please verify the Node server is running.</span>
+      <div className="grid gap-3 xl:grid-cols-3">
+        <article className="ledger-card p-4 xl:col-span-2">
+          <div className="mb-4 flex items-center justify-between">
+            <div className="flex items-center gap-2"><ShieldCheck size={18} className={healthy ? 'text-emerald-600' : 'text-amber-600'} /><h2 className="font-bold text-[#111827]">Data health</h2></div>
+            <span className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${healthy ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>{healthy ? 'All checks passed' : 'Check configuration'}</span>
+          </div>
+          <div className="grid grid-cols-2 gap-x-8 gap-y-3 text-sm md:grid-cols-4">
+            <Health label="Integrity" value={status.integrity === 'ok' ? 'OK' : status.integrity} good={status.integrity === 'ok'} />
+            <Health label="Foreign keys" value={status.foreignKeys ? 'Enabled' : 'Disabled'} good={status.foreignKeys} />
+            <Health label="Journal mode" value={status.journalMode.toUpperCase()} good={status.journalMode.toLowerCase() === 'wal'} />
+            <Health label="Needs review" value={String(status.counts.review)} good={status.counts.review === 0} />
+            <Health label="Last activity" value={status.lastActivity ? new Date(status.lastActivity).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : 'None'} good />
+            <Health label="Backups" value={`${status.backupCount} files`} good={status.backupCount > 0} />
+            <Health label="Backup storage" value={formatSize(status.backupsSizeBytes)} good />
+            <Health label="Last backup" value={lastBackupAge === null ? 'Never' : lastBackupAge === 0 ? 'Today' : `${lastBackupAge}d ago`} good={lastBackupAge !== null && lastBackupAge <= 7} />
+          </div>
+        </article>
+
+        <article className="ledger-card flex flex-col p-4">
+          <div className="flex items-center justify-between"><div className="flex items-center gap-2"><DownloadCloud size={18} className="text-[#165DFF]" /><h2 className="font-bold">Backups</h2></div><span className="text-xs text-[#667085]">{status.backupCount} saved</span></div>
+          <div className="my-4 rounded-xl border border-[#DDE3EC] bg-[#F8FAFD] p-3 text-xs text-[#667085]">
+            <strong className="mb-1 block truncate text-sm text-[#344054]">{status.lastBackup?.name || 'No backup yet'}</strong>
+            {status.lastBackup ? `${formatSize(status.lastBackup.sizeBytes)} · ${new Date(status.lastBackup.modifiedAt).toLocaleString('en-IN')}` : 'Create the first verified SQLite backup.'}
+          </div>
+          <button onClick={handleBackup} disabled={backingUp} className="btn btn-primary mt-auto h-10 w-full gap-2"><DownloadCloud size={15} className={backingUp ? 'animate-spin' : ''} />{backingUp ? 'Creating backup…' : 'Back up now'}</button>
+        </article>
+      </div>
+
+      <article className="ledger-card p-4">
+        <div className="grid items-center gap-4 lg:grid-cols-[1.2fr_repeat(4,1fr)]">
+          <div className="flex items-center gap-3"><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#E9F1FF] text-[#165DFF]"><Bot size={20} /></span><div><h2 className="font-bold">Telegram</h2><p className="text-xs text-[#667085]">Private bot delivery and summaries</p></div></div>
+          <Health label="Connection" value={status.telegram.status === 'active' ? 'Active' : status.telegram.status === 'incomplete' ? 'Setup incomplete' : 'Disabled'} good={status.telegram.status === 'active'} />
+          <Health label="Daily summaries" value={status.telegram.summaryTimes.split(',').join(' · ')} good={status.telegram.enabled} />
+          <Health label="Last forwarded ID" value={status.telegram.lastForwardedTransactionId ? `#${status.telegram.lastForwardedTransactionId}` : 'None'} good={status.telegram.lastForwardedTransactionId > 0} />
+          <Health label="Latest summaries" value={[status.telegram.lastSummary6Date, status.telegram.lastSummary8Date].filter(Boolean).join(' · ') || 'Pending'} good={Boolean(status.telegram.lastSummary6Date || status.telegram.lastSummary8Date)} />
         </div>
-      )}
-
-      {status && (
-        <>
-          {/* Reusable Status Banner Component (Section 4.6 Spec) */}
-          <div
-            className={`p-5 rounded-2xl border flex items-center justify-between gap-4 ${
-              !isHealthy
-                ? 'bg-rose-50 border-rose-200 text-rose-900'
-                : isBackupOverdue
-                ? 'bg-amber-50 border-amber-200 text-amber-900'
-                : 'bg-emerald-50 border-emerald-200 text-emerald-900'
-            }`}
-          >
-            <div className="flex items-center gap-3">
-              {!isHealthy ? (
-                <AlertTriangle size={24} className="text-rose-600 shrink-0" />
-              ) : isBackupOverdue ? (
-                <AlertTriangle size={24} className="text-amber-600 shrink-0" />
-              ) : (
-                <ShieldCheck size={24} className="text-[#00B96B] shrink-0" />
-              )}
-              <div>
-                <h3 className="font-extrabold text-base">
-                  {!isHealthy
-                    ? 'Database Error / Issue Detected'
-                    : isBackupOverdue
-                    ? 'Database Healthy (Backup Recommended)'
-                    : 'System Fully Operational & Healthy'}
-                </h3>
-                <p className="text-xs mt-0.5 opacity-80">
-                  SQLite {status.journalMode.toUpperCase()} · Foreign keys{' '}
-                  {status.foreignKeys ? 'enabled' : 'disabled'} · Last activity:{' '}
-                  {status.lastActivity
-                    ? new Date(status.lastActivity).toLocaleString('en-IN')
-                    : 'none'}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* System Metrics Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-            <div className="ledger-card bg-white p-6 border border-[#DDE3EC] rounded-2xl shadow-xs">
-              <div className="flex items-center justify-between text-[#165DFF] mb-2">
-                <Database size={20} />
-                <span className="text-xs font-bold uppercase tracking-wider text-[#667085]">
-                  Database Size
-                </span>
-              </div>
-              <span className="text-2xl font-black text-[#111827] tabular-nums block">
-                {formatSize(status.databaseSizeBytes)}
-              </span>
-              <span className="text-xs text-[#667085] truncate block mt-2" title={status.databasePath}>
-                {status.databasePath}
-              </span>
-            </div>
-
-            <div className="ledger-card bg-white p-6 border border-[#DDE3EC] rounded-2xl shadow-xs">
-              <div className="flex items-center justify-between text-[#00B96B] mb-2">
-                <HardDrive size={20} />
-                <span className="text-xs font-bold uppercase tracking-wider text-[#667085]">
-                  Backups Storage
-                </span>
-              </div>
-              <span className="text-2xl font-black text-[#111827] tabular-nums block">
-                {formatSize(status.backupsSizeBytes)}
-              </span>
-              <span className="text-xs text-[#667085] block mt-2">
-                {status.backupCount} verified B2/local backups
-              </span>
-            </div>
-
-            <div className="ledger-card bg-white p-6 border border-[#DDE3EC] rounded-2xl shadow-xs">
-              <div className="flex items-center justify-between text-[#F79009] mb-2">
-                <CheckCircle2 size={20} />
-                <span className="text-xs font-bold uppercase tracking-wider text-[#667085]">
-                  Total Records
-                </span>
-              </div>
-              <span className="text-2xl font-black text-[#111827] tabular-nums block">
-                {status.counts.total}
-              </span>
-              <span className="text-xs text-[#667085] block mt-2">
-                {status.payeeCount} registered payees
-              </span>
-            </div>
-          </div>
-
-          {/* Last Backup Details */}
-          {status.lastBackup && (
-            <div className="ledger-card bg-white p-6 border border-[#DDE3EC] rounded-2xl shadow-xs space-y-3">
-              <h3 className="font-bold text-base text-[#111827]">Most Recent Verified Backup</h3>
-              <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
-                <div>
-                  <span className="font-mono font-bold text-slate-800 block text-sm">
-                    {status.lastBackup.name}
-                  </span>
-                  <span className="text-[#667085]">
-                    Created {new Date(status.lastBackup.modifiedAt).toLocaleString('en-IN')}
-                  </span>
-                </div>
-                <span className="px-3 py-1 bg-emerald-100 text-emerald-800 font-bold rounded-full">
-                  {formatSize(status.lastBackup.sizeBytes)}
-                </span>
-              </div>
-            </div>
-          )}
-        </>
-      )}
+      </article>
     </div>
   );
+}
+
+function Health({ label, value, good }: { label: string; value: string; good: boolean }) {
+  return <div className="min-w-0"><span className="block text-[10px] font-bold uppercase tracking-wide text-[#98A2B3]">{label}</span><span className="mt-1 flex items-center gap-1.5 truncate text-xs font-semibold text-[#344054]">{good ? <CheckCircle2 size={13} className="shrink-0 text-emerald-600" /> : <AlertTriangle size={13} className="shrink-0 text-amber-600" />}{value}</span></div>;
 }

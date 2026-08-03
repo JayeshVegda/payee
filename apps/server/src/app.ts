@@ -51,7 +51,9 @@ export function createApp(options: AppOptions): Hono {
     }
     const startedAt = performance.now();
     await next();
-    if (logLevel !== 'silent') {
+    // Request logs are useful during development, but writing one line for
+    // every polling request is unnecessary on the always-on workstation.
+    if (logLevel === 'debug' || logLevel === 'info') {
       log('info', 'request', {
         method: context.req.method,
         path: new URL(context.req.url).pathname,
@@ -94,18 +96,23 @@ export function createApp(options: AppOptions): Hono {
     const expected =
       error instanceof TypeError ||
       error instanceof RangeError ||
-      ['ClosedBusinessDateError', 'TransactionConflictError', 'TransactionNotFoundError'].includes(
+      ['ClosedBusinessDateError', 'TransactionConflictError', 'TransactionNotFoundError', 'DuplicateTransactionError', 'NewPayeeRequiresConfirmationError'].includes(
         error.name
       );
+    
+    let code = expected ? error.name.replace(/Error$/, '').toUpperCase() : 'INTERNAL_ERROR';
+    if (error.name === 'DuplicateTransactionError') code = 'DUPLICATE_TRANSACTION';
+    if (error.name === 'NewPayeeRequiresConfirmationError') code = 'NEW_PAYEE_UNCONFIRMED';
+
     return context.json<ErrorBody>(
       {
         error: {
-          code: expected ? error.name.replace(/Error$/, '').toUpperCase() : 'INTERNAL_ERROR',
+          code,
           message: expected ? error.message : 'The request could not be completed'
         }
       },
       expected
-        ? error.name.includes('Conflict') || error.name.includes('Closed')
+        ? error.name.includes('Conflict') || error.name.includes('Closed') || error.name === 'DuplicateTransactionError' || error.name === 'NewPayeeRequiresConfirmationError'
           ? 409
           : 400
         : 500

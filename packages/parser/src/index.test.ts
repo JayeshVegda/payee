@@ -37,7 +37,7 @@ describe('new payee quick entry', () => {
     });
     expect(preview).toMatchObject({
       valid: true,
-      payeeName: 'amit kumar',
+      payeeName: 'Amit Kumar',
       isNewPayee: true,
       amountPaise: 500_000_000,
       paymentMethodId: 1,
@@ -71,15 +71,50 @@ describe('new payee quick entry', () => {
     expect(preview).toMatchObject({
       valid: true,
       payeeId: null,
-      payeeName: 'abc bhai',
+      payeeName: 'Abc Bhai',
       isNewPayee: true,
       amountPaise: 250_000
+    });
+  });
+
+  it('does not require review when a new payee has a category and cash default', () => {
+    const preview = parseQuickEntry('amit kumar 3l wages', {
+      payees: [],
+      categories: [{ id: 8, name: 'Wages', normalizedNames: ['wages'] }],
+      paymentMethods: [{ id: 1, code: 'cash', displayName: 'Cash', aliases: ['cash'] }]
+    });
+    expect(preview).toMatchObject({
+      valid: true,
+      payeeName: 'Amit Kumar',
+      categoryId: 8,
+      paymentMethodId: 1,
+      needsReview: false
+    });
+  });
+
+  it.each([
+    ['sai metal 3l wages "upad na 300 cut"', 'upad na 300 cut'],
+    ['sai metal 3l wages // upad na 300 cut', 'upad na 300 cut']
+  ])('keeps an explicit note separate for %s', (command, note) => {
+    const preview = parseQuickEntry(command, {
+      payees: [],
+      categories: [{ id: 8, name: 'Wages', normalizedNames: ['wages'] }],
+      paymentMethods: [{ id: 1, code: 'cash', displayName: 'Cash', aliases: ['cash'] }]
+    });
+    expect(preview).toMatchObject({
+      valid: true,
+      payeeName: 'Sai Metal',
+      amountPaise: 30_000_000,
+      categoryId: 8,
+      paymentMethodId: 1,
+      note,
+      needsReview: false
     });
   });
 });
 
 describe('known payee defaults', () => {
-  it('uses the payee category and method when they are not written explicitly', () => {
+  it('uses the payee category but keeps cash as the desk-wide default method', () => {
     const preview = parseQuickEntry('vijay patel 2500', {
       payees: [{
         id: 2,
@@ -97,7 +132,7 @@ describe('known payee defaults', () => {
     expect(preview).toMatchObject({
       valid: true,
       categoryId: 8,
-      paymentMethodId: 3,
+      paymentMethodId: 1,
       needsReview: false
     });
   });

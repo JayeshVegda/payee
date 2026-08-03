@@ -2,18 +2,18 @@
 
 ## Dependency direction
 
-1. `apps/web`: presentation, TanStack Table core integration, and client-side server-state caching only.
+1. `apps/web-react`: presentation, table views, and client-side server-state caching only.
 2. `apps/server`: Hono routes, middleware, static serving, and dependency composition.
 3. `packages/core`: business services and repository interfaces.
 4. `packages/database`: Kysely types, SQLite adapters, migrations, pragmas, and reporting queries.
 5. `packages/parser`: deterministic local quick-entry parsing.
 6. Future job and integration adapters call core services; core never imports them.
 
-Route handlers validate transport concerns and call services. Svelte components never contain accounting rules. Repositories contain persistence behavior but not user workflows. Every capture source uses the same `TransactionService`.
+Route handlers validate transport concerns and call services. React components never contain accounting rules. Repositories contain persistence behavior but not user workflows. Every capture source uses the same `TransactionService`.
 
 ## Runtime
 
-Production starts one Hono process on `127.0.0.1:4782`. API routes use `/api`; hashed frontend assets and the SPA fallback are served from `apps/web/build`. SQLite uses a single in-process `better-sqlite3` connection through Kysely. Short transactions and a busy timeout avoid lock surprises.
+Production starts one Hono process on `127.0.0.1:4782`. API routes use `/api`; hashed frontend assets and the SPA fallback are served from `apps/web-react/build`. SQLite uses a single in-process `better-sqlite3` connection through Kysely. Short transactions and a busy timeout avoid lock surprises.
 
 Development uses Vite on loopback port 4782 and Hono on loopback port 4783. This second process is development-only.
 
@@ -23,7 +23,7 @@ Input is validated with shared Zod schemas. The repository writes the transactio
 
 ## Website modules
 
-The static Svelte SPA provides Today, Ledger, Master data, and Reports workspaces. API routes delegate to `LedgerService`; route and component code do not contain SQL. Skeleton 4 and a custom Payment Desk theme own the visual token system. Ark UI is limited to accessible behavior primitives, TanStack Table v8 drives ledger row/sort state, Fuse.js powers payee search, and LayerChart 2 is dynamically imported only when Reports needs charts.
+The static React SPA provides Today, Payment Inbox, Payees, Reports, Activity, Export, and System workspaces. API routes delegate to `LedgerService`; route and component code do not contain SQL. Tailwind and the custom Payment Desk theme own the visual token system. Behavior primitives remain limited to accessible interactions, TanStack Table/query patterns drive data views, Fuse.js powers payee search, and report charts are dynamically imported only when Reports needs them.
 
 ## External integrations
 

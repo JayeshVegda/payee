@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api, formatInr, post, queryString } from '../api/client';
-import { Download, RefreshCw, Calendar, Sparkles, TrendingUp, AlertTriangle, Layers } from 'lucide-react';
-import { toast } from 'sonner';
+import { Calendar, Sparkles, TrendingUp, AlertTriangle, Layers } from 'lucide-react';
 import { TransactionDrawer } from '../components/common/TransactionDrawer';
 
 const ReportCharts = React.lazy(() => import('../components/reports/ReportCharts'));
@@ -57,17 +56,13 @@ export default function ReportsPage() {
   const {
     data,
     isLoading: loading,
+    isError: reportsError,
     refetch
   } = useQuery<ReportsData>({
     queryKey: ['reports-data', from, to],
     queryFn: () => api<ReportsData>(`/reports${queryString({ from, to })}`),
     staleTime: 30000
   });
-
-  const handleRefresh = async () => {
-    await refetch();
-    toast.success('Report data updated');
-  };
 
   const setRangePreset = (days: number | 'month' | 'six-months') => {
     if (days === 'month') {
@@ -85,11 +80,6 @@ export default function ReportsPage() {
     setTo(today);
   };
 
-  const handleExportCsv = () => {
-    window.open(`/api/export/transactions.csv${queryString({ from, to })}`, '_blank');
-    toast.success('Downloading report CSV...');
-  };
-
   const totals = data?.totals || {
     totalPaise: 0,
     paymentCount: 0,
@@ -103,32 +93,14 @@ export default function ReportsPage() {
 
   return (
     <div className="space-y-6">
-      {/* Title & Actions */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-[#111827]">Reports</h1>
-          <p className="mt-1 text-sm text-[#667085]">Spending trends and breakdowns.</p>
+      <h1 className="sr-only">Reports</h1>
+      {reportsError && (
+        <div className="flex items-center gap-3 rounded-lg bg-red-50 p-4 text-sm text-red-800 border border-red-200">
+          <span className="font-semibold">Connection Error:</span>
+          <span>Unable to connect to the backend server. Please verify the server is running locally on port 4782.</span>
+          <button onClick={() => refetch().catch(() => null)} className="ml-auto underline font-semibold hover:text-red-900">Retry</button>
         </div>
-
-        <div className="flex items-center gap-3">
-          <button
-            onClick={handleRefresh}
-            className="btn btn-secondary h-10 px-3 text-[#667085] hover:text-[#111827]"
-            title="Refresh reports"
-          >
-            <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
-          </button>
-
-          <button
-            onClick={handleExportCsv}
-            className="btn btn-secondary h-10 px-4 gap-2 text-slate-700"
-          >
-            <Download size={16} />
-            <span>Export CSV</span>
-          </button>
-        </div>
-      </div>
-
+      )}
       {/* Date Range Selector Bar */}
       <div className="ledger-card p-4 bg-white border border-[#DDE3EC] rounded-2xl shadow-xs flex flex-col md:flex-row items-center justify-between gap-4">
         <div className="flex items-center gap-2">

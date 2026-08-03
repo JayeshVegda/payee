@@ -5,7 +5,7 @@
   "type": "module",
   "packageManager": "pnpm@11.18.0",
   "engines": {
-    "node": ">=24.0.0 <25",
+    "node": ">=24.0.0",
     "pnpm": "11.18.0"
   },
   "scripts": {
@@ -24,7 +24,9 @@
     "db:migrate": "pnpm run build:packages && tsx scripts/migrate.ts",
     "db:backup": "pnpm run build:packages && tsx scripts/backup.ts",
     "db:seed-demo": "pnpm run build:packages && tsx scripts/seed-demo.ts",
-    "smoke": "bash scripts/smoke-production.sh"
+    "smoke": "bash scripts/smoke-production.sh",
+    "setup:windows": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/setup-windows.ps1",
+    "verify:production": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-production.ps1"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

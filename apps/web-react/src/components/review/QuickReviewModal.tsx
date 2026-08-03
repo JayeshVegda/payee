@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { MasterData, formatInr, patch } from '../../api/client';
 import { X, Check } from 'lucide-react';
 import { toast } from 'sonner';
@@ -7,7 +8,15 @@ interface QuickReviewModalProps {
   open: boolean;
   onClose: () => void;
   master: MasterData;
-  transaction: { id: number; updatedAt: string; amountPaise?: number; payeeName?: string } | null;
+  transaction: {
+    id: number;
+    updatedAt: string;
+    payeeId?: number;
+    amountPaise?: number;
+    payeeName?: string;
+    categoryId?: number | null;
+    paymentMethodId?: number | null;
+  } | null;
   onSaved: () => void;
 }
 
@@ -18,13 +27,22 @@ export default function QuickReviewModal({
   transaction,
   onSaved
 }: QuickReviewModalProps) {
+  const queryClient = useQueryClient();
   const [categoryId, setCategoryId] = useState('');
+  const [methodId, setMethodId] = useState('');
+  const [remember, setRemember] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
     if (open) {
-      setCategoryId('');
+      setCategoryId(transaction?.categoryId?.toString() || '');
+      setMethodId(
+        transaction?.paymentMethodId?.toString() ||
+        master.paymentMethods.find((method) => method.code === 'cash')?.id.toString() ||
+        ''
+      );
+      setRemember(false);
       setError('');
     }
   }, [open, transaction]);
@@ -33,8 +51,8 @@ export default function QuickReviewModal({
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!categoryId) {
-      setError('Please choose a category to complete the review.');
+    if (!categoryId || !methodId) {
+      setError('Choose both a category and payment method to complete the review.');
       return;
     }
     setSaving(true);
@@ -42,11 +60,19 @@ export default function QuickReviewModal({
     try {
       await patch(`/transactions/${transaction.id}`, {
         categoryId: Number(categoryId),
+        paymentMethodId: Number(methodId),
         needsReview: false,
         expectedUpdatedAt: transaction.updatedAt,
         source: 'web'
       });
+      if (remember && transaction.payeeId) {
+        await patch(`/payees/${transaction.payeeId}`, {
+          defaultCategoryId: Number(categoryId),
+          defaultPaymentMethodId: Number(methodId)
+        });
+      }
       toast.success('Payment review completed');
+      await queryClient.invalidateQueries();
       onSaved();
       onClose();
     } catch (caught) {
@@ -97,8 +123,44 @@ export default function QuickReviewModal({
           </div>
 
           <div className="p-3 text-xs bg-yellow-50 border border-yellow-200 text-yellow-800 rounded-lg">
-            <strong>Unassigned category:</strong> This transaction was saved with defaults or a new payee and needs a manual category mapping.
+            <strong>Reason:</strong>{' '}
+            {!transaction.categoryId && !transaction.paymentMethodId
+              ? 'Category and payment method are missing.'
+              : !transaction.categoryId
+                ? 'Category is missing.'
+                : !transaction.paymentMethodId
+                  ? 'Payment method is missing.'
+                  : 'This payment was marked for manual verification.'}
           </div>
+
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-ledger-muted">Payment method</label>
+            <select
+              value={methodId}
+              onChange={(e) => setMethodId(e.target.value)}
+              className="form-input"
+              required
+            >
+              {master.paymentMethods.map((method) => (
+                <option key={method.id} value={method.id}>
+                  {method.displayName}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <label className="flex items-start gap-2 rounded-lg border border-ledger-border p-3 text-xs text-ledger-muted">
+            <input
+              type="checkbox"
+              checked={remember}
+              onChange={(event) => setRemember(event.target.checked)}
+              className="mt-0.5 h-4 w-4"
+            />
+            <span>
+              <strong className="block text-ledger-ink">Remember for this payee</strong>
+              Suggest this category next time. Cash still remains the desk-wide payment default.
+            </span>
+          </label>
 
           <div className="space-y-1">
             <label className="text-xs font-semibold text-ledger-muted">Select Category</label>

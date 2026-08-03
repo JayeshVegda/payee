@@ -2,6 +2,8 @@ import { join } from 'node:path';
 import { readdirSync, statSync } from 'node:fs';
 import {
   TransactionNotFoundError,
+  DuplicateTransactionError,
+  NewPayeeRequiresConfirmationError,
   TransactionService,
   type TransactionRecord
 } from '@payment-ledger/core';
@@ -37,6 +39,7 @@ interface PayeeRow {
   aliases: string | null;
   payment_count?: number;
   total_paid_paise?: number;
+  this_month_paid_paise?: number;
 }
 
 interface CategoryRow {
@@ -143,6 +146,7 @@ function mapPayee(row: PayeeRow) {
     aliases: row.aliases ? row.aliases.split('|||').filter(Boolean) : [],
     paymentCount: row.payment_count ?? 0,
     totalPaidPaise: row.total_paid_paise ?? 0,
+    thisMonthPaidPaise: row.this_month_paid_paise ?? 0,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };
@@ -212,14 +216,12 @@ export class LedgerService {
     const payees = this.sqlite
       .prepare(
         `SELECT p.*,
-          group_concat(DISTINCT pa.alias) AS aliases,
-          count(DISTINCT CASE WHEN t.status = 'posted' THEN t.id END) AS payment_count,
-          coalesce(sum(DISTINCT CASE WHEN t.status = 'posted' THEN t.amount_paise END), 0) AS total_paid_paise
+          (SELECT group_concat(alias, '|||') FROM payee_aliases WHERE payee_id = p.id) AS aliases,
+          (SELECT count(*) FROM transactions WHERE payee_id = p.id AND status = 'posted') AS payment_count,
+          (SELECT coalesce(sum(amount_paise), 0) FROM transactions WHERE payee_id = p.id AND status = 'posted') AS total_paid_paise,
+          (SELECT coalesce(sum(amount_paise), 0) FROM transactions WHERE payee_id = p.id AND status = 'posted' AND transaction_date >= date('now', 'start of month')) AS this_month_paid_paise
         FROM payees p
-        LEFT JOIN payee_aliases pa ON pa.payee_id = p.id
-        LEFT JOIN transactions t ON t.payee_id = p.id
         ${activeClause}
-        GROUP BY p.id
         ORDER BY p.favourite DESC, p.name COLLATE NOCASE`
       )
       .all() as PayeeRow[];
@@ -401,6 +403,10 @@ export class LedgerService {
     );
   }
 
+  deleteCategory(id: number) {
+    this.sqlite.prepare('DELETE FROM categories WHERE id = ?').run(id);
+  }
+
   updatePaymentMethod(id: number, input: { displayName?: string; active?: boolean }) {
     const current = this.getMasterData({ includeInactive: true }).paymentMethods.find(
       (method) => method.id === id
@@ -421,23 +427,44 @@ export class LedgerService {
     );
   }
 
+  createPaymentMethod(input: { code: string; displayName: string; active?: boolean }) {
+    const active = input.active !== false ? 1 : 0;
+    const stmt = this.sqlite.prepare(
+      `INSERT INTO payment_methods (code, display_name, active) VALUES (?, ?, ?)`
+    );
+    const result = stmt.run(input.code.toLowerCase().trim(), input.displayName.trim(), active);
+    return this.getMasterData({ includeInactive: true }).paymentMethods.find(
+      (method) => method.id === Number(result.lastInsertRowid)
+    );
+  }
+
+  deletePaymentMethod(id: number) {
+    this.sqlite.prepare('DELETE FROM payment_methods WHERE id = ?').run(id);
+  }
+
   previewQuickEntry(command: string): QuickEntryPreview {
     if (typeof command !== 'string' || command.trim().length === 0) {
       throw new TypeError('Enter a payment command');
     }
+    const recentMap = new Map<number, { category_id: number | null; payment_method_id: number | null }>();
+    const rows = this.sqlite.prepare(
+      `SELECT payee_id, category_id, payment_method_id
+       FROM (
+         SELECT payee_id, category_id, payment_method_id,
+                ROW_NUMBER() OVER (PARTITION BY payee_id ORDER BY transaction_date DESC, transaction_time DESC, id DESC) as rn
+         FROM transactions
+         WHERE status = 'posted'
+       )
+       WHERE rn = 1`
+    ).all() as Array<{ payee_id: number; category_id: number | null; payment_method_id: number | null }>;
+    for (const row of rows) {
+      recentMap.set(row.payee_id, row);
+    }
+
     const master = this.getMasterData();
-    const recentDefaults = this.sqlite.prepare(
-      `SELECT category_id, payment_method_id
-       FROM transactions
-       WHERE payee_id = ? AND status = 'posted'
-       ORDER BY transaction_date DESC, transaction_time DESC, id DESC
-       LIMIT 1`
-    );
     const preview = parseQuickEntry(command, {
       payees: master.payees.map((payee) => {
-        const recent = recentDefaults.get(payee.id) as
-          | { category_id: number | null; payment_method_id: number | null }
-          | undefined;
+        const recent = recentMap.get(payee.id);
         return {
           id: payee.id,
           name: payee.name,
@@ -476,6 +503,24 @@ export class LedgerService {
       }))
     });
     const clock = this.resolveCommandClock(command);
+    if (preview.payeeId && preview.amountPaise) {
+      const history = this.sqlite
+        .prepare(
+          `SELECT round(avg(amount_paise)) AS average, count(*) AS count
+           FROM transactions WHERE payee_id = ? AND status = 'posted'`
+        )
+        .get(preview.payeeId) as { average: number | null; count: number };
+      if (
+        history.count >= 3 &&
+        history.average &&
+        preview.amountPaise >= 5_000_000 &&
+        preview.amountPaise >= history.average * 2
+      ) {
+        preview.warnings.push(
+          `Unusually high: ${Math.round((preview.amountPaise / history.average) * 10) / 10}× this payee's average`
+        );
+      }
+    }
     return {
       ...preview,
       transactionDate: clock.date,
@@ -556,7 +601,12 @@ export class LedgerService {
   }
 
   async createFromCommand(
-    command: string
+    command: string,
+    options?: {
+      confirmNewPayee?: boolean | undefined;
+      confirmDuplicate?: boolean | undefined;
+      source?: ChangeSource | undefined;
+    }
   ): Promise<{
     transaction: TransactionRecord;
     duplicate: boolean;
@@ -570,11 +620,15 @@ export class LedgerService {
     let payeeId = preview.payeeId;
     let createdPayee = false;
     if (!payeeId && preview.isNewPayee) {
+      if (!options?.confirmNewPayee) {
+        throw new NewPayeeRequiresConfirmationError('New payee requires confirmation');
+      }
       const cashMethod = this.getMasterData().paymentMethods.find(
         (method) => method.code === 'cash'
       );
+      const isCompany = /\b(traders|corp|industries|supply|agency|transport|enterprises|works|mart|station|paints|earthmovers|crushers|machinery|brick|hydraulic|spares)\b/i.test(preview.payeeName);
       const newPayee = this.createPayee({
-        type: 'person',
+        type: isCompany ? 'company' : 'person',
         name: preview.payeeName,
         defaultCategoryId: null,
         defaultPaymentMethodId: cashMethod?.id ?? null
@@ -589,15 +643,24 @@ export class LedgerService {
     };
     const duplicateMatch = this.sqlite
       .prepare(
-        `SELECT CASE WHEN amount_paise = ? THEN 'Same payee and amount already recorded today'
-                   ELSE 'This payee was paid during the last 30 minutes' END AS reason
+        `SELECT amount_paise, transaction_time,
+          CASE WHEN amount_paise = ? THEN 'Same payee and amount already recorded today'
+               ELSE 'This payee was paid during the last 30 minutes' END AS reason
        FROM transactions
        WHERE transaction_date = ? AND payee_id = ? AND status = 'posted'
          AND (amount_paise = ? OR created_at >= strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-30 minutes'))
        ORDER BY (amount_paise = ?) DESC, id DESC LIMIT 1`
       )
       .get(preview.amountPaise, clock.date, payeeId, preview.amountPaise, preview.amountPaise) as
-      { reason: string } | undefined;
+      { reason: string; amount_paise: number; transaction_time: string } | undefined;
+    const duplicate = !!duplicateMatch && !options?.confirmDuplicate;
+    const duplicateReason = duplicateMatch
+      ? `${duplicateMatch.reason} at ${duplicateMatch.transaction_time.slice(0, 5)}`
+      : null;
+    if (duplicate && duplicateReason) {
+      throw new DuplicateTransactionError(duplicateReason);
+    }
+
     const transaction = await this.transactions.create({
       transactionDate: clock.date,
       transactionTime: clock.time,
@@ -606,7 +669,7 @@ export class LedgerService {
       categoryId: preview.categoryId,
       paymentMethodId: preview.paymentMethodId,
       note: preview.note,
-      source: 'web',
+      source: options?.source ?? 'web',
       needsReview: preview.needsReview
     });
     return {
@@ -874,7 +937,9 @@ export class LedgerService {
           count(*) AS count,
           coalesce(sum(CASE WHEN pm.code = 'cash' THEN t.amount_paise ELSE 0 END), 0) AS cash,
           coalesce(sum(CASE WHEN pm.code != 'cash' THEN t.amount_paise ELSE 0 END), 0) AS digital,
-          sum(CASE WHEN t.needs_review = 1 THEN 1 ELSE 0 END) AS review_count
+          sum(CASE WHEN t.needs_review = 1 THEN 1 ELSE 0 END) AS review_count,
+          count(DISTINCT t.payee_id) AS unique_payee_count,
+          coalesce(max(t.amount_paise), 0) AS largest_payment
          FROM transactions t LEFT JOIN payment_methods pm ON pm.id = t.payment_method_id
          WHERE t.transaction_date = ? AND t.status = 'posted'`
       )
@@ -884,7 +949,34 @@ export class LedgerService {
       cash: number;
       digital: number;
       review_count: number;
+      unique_payee_count: number;
+      largest_payment: number;
     };
+    const monthStart = `${date.slice(0, 7)}-01`;
+    const monthDate = new Date(`${monthStart}T00:00:00Z`);
+    monthDate.setUTCMonth(monthDate.getUTCMonth() - 1);
+    const previousMonthStart = monthDate.toISOString().slice(0, 10);
+    const monthMetrics = this.sqlite
+      .prepare(
+        `SELECT
+          coalesce(sum(CASE WHEN transaction_date >= ? AND transaction_date <= ? THEN amount_paise ELSE 0 END), 0) AS month_total,
+          coalesce(sum(CASE WHEN transaction_date >= ? AND transaction_date < ? THEN amount_paise ELSE 0 END), 0) AS previous_month_total,
+          coalesce(round(
+            sum(CASE WHEN transaction_date >= ? AND transaction_date <= ? THEN amount_paise ELSE 0 END) * 1.0 /
+            nullif(count(DISTINCT CASE WHEN transaction_date >= ? AND transaction_date <= ? THEN transaction_date END), 0)
+          ), 0) AS average_active_day
+         FROM transactions WHERE status = 'posted'`
+      )
+      .get(
+        monthStart,
+        date,
+        previousMonthStart,
+        monthStart,
+        monthStart,
+        date,
+        monthStart,
+        date
+      ) as { month_total: number; previous_month_total: number; average_active_day: number };
     const recent = this.listTransactions({ date, pageSize: 12 }).items;
     const frequent = this.sqlite
       .prepare(
@@ -902,6 +994,11 @@ export class LedgerService {
       cashPaise: totals.cash,
       digitalPaise: totals.digital,
       reviewCount: totals.review_count ?? 0,
+      uniquePayeeCount: totals.unique_payee_count ?? 0,
+      largestPaymentPaise: totals.largest_payment ?? 0,
+      monthTotalPaise: monthMetrics.month_total ?? 0,
+      previousMonthTotalPaise: monthMetrics.previous_month_total ?? 0,
+      averageActiveDayPaise: monthMetrics.average_active_day ?? 0,
       recent,
       frequent
     };
@@ -991,8 +1088,55 @@ export class LedgerService {
   }
 
   exportTransactionsCsv(options: ListTransactionOptions): string {
-    const items = this.listTransactions({ ...options, page: 1, pageSize: 100 }).items;
-    const rows = [
+    const conditions: string[] = [];
+    const parameters: Array<string | number> = [];
+    if (options.date) {
+      conditions.push('t.transaction_date = ?');
+      parameters.push(options.date);
+    }
+    if (options.from) {
+      conditions.push('t.transaction_date >= ?');
+      parameters.push(options.from);
+    }
+    if (options.to) {
+      conditions.push('t.transaction_date <= ?');
+      parameters.push(options.to);
+    }
+    if (options.search) {
+      conditions.push('(p.name LIKE ? OR t.note LIKE ?)');
+      parameters.push(`%${options.search}%`, `%${options.search}%`);
+    }
+    if (options.methodId) {
+      conditions.push('t.payment_method_id = ?');
+      parameters.push(options.methodId);
+    }
+    if (options.categoryId) {
+      conditions.push('t.category_id = ?');
+      parameters.push(options.categoryId);
+    }
+    if (options.payeeId) {
+      conditions.push('t.payee_id = ?');
+      parameters.push(options.payeeId);
+    }
+    if (options.reviewOnly) conditions.push('t.needs_review = 1');
+    if (!options.includeVoided) conditions.push("t.status = 'posted'");
+    const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    const rows = this.sqlite
+      .prepare(
+        `SELECT t.*, p.name AS payee_name, c.name AS category_name,
+          pm.display_name AS payment_method_name, pm.code AS payment_method_code
+         FROM transactions t
+         JOIN payees p ON p.id = t.payee_id
+         LEFT JOIN categories c ON c.id = t.category_id
+         LEFT JOIN payment_methods pm ON pm.id = t.payment_method_id
+         ${where}
+         ORDER BY t.transaction_date DESC, t.transaction_time DESC, t.id DESC`
+      )
+      .all(...parameters) as TransactionListRow[];
+
+    const items = rows.map(mapListTransaction);
+    const csvRows = [
       [
         'Date',
         'Time',
@@ -1018,7 +1162,7 @@ export class LedgerService {
         item.needsReview ? 'yes' : 'no'
       ])
     ];
-    return rows.map((row) => row.map(csvCell).join(',')).join('\r\n');
+    return csvRows.map((row) => row.map(csvCell).join(',')).join('\r\n');
   }
 
   async createBackup() {

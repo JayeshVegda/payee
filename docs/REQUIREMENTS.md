@@ -15,7 +15,7 @@ Record outgoing payments quickly and preserve who was paid, exact INR amount, bu
 
 ## Functional roadmap
 
-The product covers master data, smart and manual capture, ledger corrections, reports/exports, verified backups/recovery, and later Telegram input. Telegram is explicitly outside the current implementation.
+The product covers master data, smart and manual capture, ledger corrections, reports/exports, verified backups/recovery, and an optional allowlisted Telegram companion. Telegram remains isolated behind the same core transaction service.
 
 ## Foundation acceptance
 

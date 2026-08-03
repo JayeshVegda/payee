@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   api,
@@ -9,9 +10,11 @@ import {
   DashboardData,
   MasterData,
   QuickPreview,
+  QuickSaveResult,
   LedgerTransaction,
   Payee
 } from '../api/client';
+import { ApiError } from '../api/client';
 import Fuse from 'fuse.js';
 import {
   Search,
@@ -28,32 +31,60 @@ import {
   Wallet,
   Zap,
   Check,
-  Star
+  Star,
+  Edit,
+  Trash2
 } from 'lucide-react';
 import { toast } from 'sonner';
-import DetailedEntryDrawer from '../components/payment-entry/DetailedEntryDrawer';
+
 import QuickReviewModal from '../components/review/QuickReviewModal';
 import { PayeeAvatar } from '../components/common/PayeeAvatar';
 import { StatusPill } from '../components/common/StatusPill';
 import { TransactionDrawer } from '../components/common/TransactionDrawer';
+import { ConfirmModal } from '../components/common/ConfirmModal';
 
 export default function TodayPage() {
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [command, setCommand] = useState('');
   const [preview, setPreview] = useState<QuickPreview | null>(null);
+  const [previewCommand, setPreviewCommand] = useState('');
   const [saving, setSaving] = useState(false);
-  const [suggestionIndex, setSuggestionIndex] = useState(0);
+  const [suggestionIndex, setSuggestionIndex] = useState(-1);
+
+  // Confirmation / Edit States
+  const [drawerInitialEdit, setDrawerInitialEdit] = useState(false);
+  const [voidConfirmTx, setVoidConfirmTx] = useState<LedgerTransaction | null>(null);
+  const [quickAddConfirmOpen, setQuickAddConfirmOpen] = useState(false);
+
+  const handleVoidTransaction = async (e: React.MouseEvent, id: number) => {
+    e.stopPropagation();
+    if (!confirm('Are you sure you want to void this transaction?')) return;
+    try {
+      await post(`/transactions/${id}/void`, { reason: 'Voided from Today after user review' });
+      await refetchTransactions();
+      await refetchDashboard();
+      toast.success('Transaction voided successfully');
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to void transaction');
+    }
+  };
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [newPayeeConfirmed, setNewPayeeConfirmed] = useState(false);
   const [duplicateConfirmed, setDuplicateConfirmed] = useState(false);
+  const [duplicateReason, setDuplicateReason] = useState('');
 
-  const [detailedOpen, setDetailedOpen] = useState(false);
+
   const [reviewOpen, setReviewOpen] = useState(false);
   const [selectedTransaction, setSelectedTransaction] = useState<LedgerTransaction | null>(null);
   const [reviewTransaction, setReviewTransaction] = useState<{
     id: number;
     updatedAt: string;
+    payeeId?: number;
     amountPaise?: number;
     payeeName?: string;
+    categoryId?: number | null;
+    paymentMethodId?: number | null;
   } | null>(null);
 
   const inputRef = useRef<HTMLInputElement>(null);
@@ -64,13 +95,14 @@ export default function TodayPage() {
   const {
     data: dashboard,
     isLoading: dashboardLoading,
+    isError: dashboardError,
     refetch: refetchDashboard
   } = useQuery<DashboardData>({
     queryKey: ['dashboard'],
     queryFn: () => api<DashboardData>('/dashboard')
   });
 
-  const { data: master, refetch: refetchMaster } = useQuery<MasterData>({
+  const { data: master, isError: masterError, refetch: refetchMaster } = useQuery<MasterData>({
     queryKey: ['master-data'],
     queryFn: () => api<MasterData>('/master-data')
   });
@@ -80,6 +112,7 @@ export default function TodayPage() {
   const {
     data: transactionsData,
     isLoading: transactionsLoading,
+    isError: transactionsError,
     refetch: refetchTransactions
   } = useQuery<{ items: LedgerTransaction[] }>({
     queryKey: ['transactions', todayDate],
@@ -89,6 +122,11 @@ export default function TodayPage() {
 
   const todaysItems = transactionsData?.items || [];
   const loading = dashboardLoading || transactionsLoading;
+  const hasError = dashboardError || masterError || transactionsError;
+  const hasAmountInput = useMemo(
+    () => /(?:^|\s)(?:\d+(?:[.,]\d+)?|\.\d+)\s*(?:k|l|lac|lakh)?(?=\s|$)/i.test(command),
+    [command]
+  );
 
   const { data: lastPaymentData } = useQuery<{ items: LedgerTransaction[] }>({
     queryKey: ['payee-last-payment', preview?.payeeId],
@@ -98,7 +136,7 @@ export default function TodayPage() {
   const lastPayment = lastPaymentData?.items[0];
 
   const handleRefresh = async () => {
-    await Promise.all([refetchDashboard(), refetchMaster(), refetchTransactions()]);
+    await Promise.all([refetchDashboard().catch(() => null), refetchMaster().catch(() => null), refetchTransactions().catch(() => null)]);
     toast.success('Today data refreshed');
   };
 
@@ -143,53 +181,87 @@ export default function TodayPage() {
   // Handle Quick Entry input & live preview
   useEffect(() => {
     window.clearTimeout(previewTimerRef.current);
-    setSuggestionIndex(0);
-    
+    setSuggestionIndex(-1);
+
     if (!command.trim()) {
       setPreview(null);
+      setPreviewCommand('');
       setNewPayeeConfirmed(false);
       setDuplicateConfirmed(false);
+      setDuplicateReason('');
       setShowSuggestions(false);
       return;
     }
 
-    const normalizedCommand = command.trim().toLocaleLowerCase('en-IN');
+    const payeePrefix = command.split(/\d/)[0]?.trim() ?? '';
+    const normalizedPayeePrefix = payeePrefix.toLocaleLowerCase('en-IN');
     const exactPayee = master?.payees.some((payee) =>
       [payee.name, ...payee.aliases].some(
-        (name) => name.toLocaleLowerCase('en-IN') === normalizedCommand
+        (name) => name.toLocaleLowerCase('en-IN') === normalizedPayeePrefix
       )
     );
-    setShowSuggestions(!/\d/.test(command) && !exactPayee);
+    setShowSuggestions(
+      Boolean(payeePrefix) &&
+      !exactPayee &&
+      (!hasAmountInput || commandPayeeSuggestions.length > 0)
+    );
 
     previewTimerRef.current = window.setTimeout(async () => {
       try {
         const res = await post<QuickPreview>('/quick-entry/preview', { command });
         setPreview(res);
+        setPreviewCommand(command.trim());
       } catch {
         setPreview(null);
+        setPreviewCommand('');
       }
     }, 120);
 
     return () => window.clearTimeout(previewTimerRef.current);
-  }, [command, master?.payees]);
+  }, [command, master?.payees, hasAmountInput, commandPayeeSuggestions.length]);
+
+  useEffect(() => {
+    if (suggestionIndex < 0) return;
+    document
+      .getElementById(`payee-suggestion-${suggestionIndex}`)
+      ?.scrollIntoView({ block: 'nearest' });
+  }, [suggestionIndex]);
 
   const executeSave = async (payeeConfirmed: boolean, dupConfirmed: boolean) => {
     if (!command.trim() || saving) return;
     setSaving(true);
     try {
-      const res = await post<LedgerTransaction>('/quick-entry/save', { command });
+      const res = await post<QuickSaveResult>('/quick-entry/save', {
+        command,
+        confirmNewPayee: payeeConfirmed,
+        confirmDuplicate: dupConfirmed
+      });
 
-      toast.success(`Logged ₹${(res.amountPaise / 100).toLocaleString('en-IN')} paid to ${res.payeeName}`);
+      const saved = res.transaction;
+      toast.success(`${formatInr(saved.amountPaise)} paid to ${saved.payeeName}`, {
+        description: `${saved.categoryName || 'Uncategorised'} · ${saved.paymentMethodName || 'Cash'} · ${formatTime12(saved.transactionTime)}`
+      });
+      setQuickAddConfirmOpen(false);
       setCommand('');
       setPreview(null);
+      setPreviewCommand('');
       setNewPayeeConfirmed(false);
       setDuplicateConfirmed(false);
       setShowSuggestions(false);
-      await Promise.all([refetchDashboard(), refetchTransactions(), refetchMaster()]);
+      await queryClient.invalidateQueries();
 
       setTimeout(() => inputRef.current?.focus(), 50);
     } catch (err: any) {
-      toast.error(err.message || 'Failed to record payment');
+      const msg = err.message || '';
+      if ((err instanceof ApiError && err.code === 'DUPLICATE_TRANSACTION') || msg.toLowerCase().includes('duplicate')) {
+        setDuplicateConfirmed(true);
+        setDuplicateReason(msg);
+        setQuickAddConfirmOpen(true);
+      } else if (msg.toLowerCase().includes('payee')) {
+        toast.error('New payee detected. Press Enter again to confirm.');
+      } else {
+        toast.error(msg || 'Failed to record payment');
+      }
     } finally {
       setSaving(false);
     }
@@ -204,6 +276,16 @@ export default function TodayPage() {
     inputRef.current?.focus();
   };
 
+  const handleSaveAttempt = () => {
+    if (preview?.errors.length) {
+      toast.error(preview.errors[0]);
+      return;
+    }
+    
+    if (!preview?.valid || previewCommand !== command.trim()) return;
+    setQuickAddConfirmOpen(true);
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (showSuggestions && commandPayeeSuggestions.length > 0) {
       if (e.key === 'ArrowDown') {
@@ -213,12 +295,13 @@ export default function TodayPage() {
       }
       if (e.key === 'ArrowUp') {
         e.preventDefault();
-        setSuggestionIndex((prev) => (prev - 1 + commandPayeeSuggestions.length) % commandPayeeSuggestions.length);
+        setSuggestionIndex((prev) => prev < 0 ? commandPayeeSuggestions.length - 1 : (prev - 1 + commandPayeeSuggestions.length) % commandPayeeSuggestions.length);
         return;
       }
       if (e.key === 'Tab') {
         e.preventDefault();
-        const selected = commandPayeeSuggestions[suggestionIndex];
+        const idx = suggestionIndex >= 0 ? suggestionIndex : 0;
+        const selected = commandPayeeSuggestions[idx];
         if (selected) applyPayeeSuggestion(selected);
         return;
       }
@@ -226,25 +309,26 @@ export default function TodayPage() {
 
     if (e.key === 'Enter') {
       e.preventDefault();
-      // If suggestions are open and user presses Enter before typing amount, select the payee
-      if (showSuggestions && commandPayeeSuggestions.length > 0 && !/\d/.test(command)) {
-        const selected = commandPayeeSuggestions[suggestionIndex];
+      
+      if (e.ctrlKey) {
+        if (preview?.valid && (!preview?.errors || preview.errors.length === 0)) {
+          executeSave(true, true);
+        }
+        return;
+      }
+
+      // A visible suggestion must be accepted before saving, including typo corrections
+      // after an amount has already been entered. Escape keeps the text as a new payee.
+      if (showSuggestions && commandPayeeSuggestions.length > 0) {
+        const idx = suggestionIndex >= 0 ? suggestionIndex : 0;
+        const selected = commandPayeeSuggestions[idx];
         if (selected) {
           applyPayeeSuggestion(selected);
           return;
         }
       }
 
-      if (preview?.errors.length) return;
-      if (preview?.isNewPayee && !newPayeeConfirmed) {
-        setNewPayeeConfirmed(true);
-        return;
-      }
-      if (preview?.warnings.some((w) => w.includes('duplicate')) && !duplicateConfirmed) {
-        setDuplicateConfirmed(true);
-        return;
-      }
-      executeSave(newPayeeConfirmed, duplicateConfirmed);
+      handleSaveAttempt();
     }
 
     if (e.key === 'Escape') {
@@ -274,13 +358,17 @@ export default function TodayPage() {
 
   return (
     <div className="w-full space-y-4">
+      <h1 className="sr-only">Today</h1>
+      {hasError && (
+        <div className="flex items-center gap-3 rounded-lg bg-red-50 p-4 text-sm text-red-800 border border-red-200">
+          <span className="font-semibold">Connection Error:</span>
+          <span>Unable to connect to the backend server. Please verify the server is running locally on port 4782.</span>
+          <button onClick={handleRefresh} className="ml-auto underline font-semibold hover:text-red-900">Retry</button>
+        </div>
+      )}
       <section className="relative rounded-2xl border border-[#DDE3EC] bg-white px-4 py-4 shadow-[var(--shadow-card)] md:px-5">
         <div className="mb-3 flex items-center justify-between gap-4">
           <h1 className="text-lg font-bold text-[#111827]">Record payment</h1>
-          <div className="flex items-center rounded-lg bg-slate-100 p-0.5 text-xs font-semibold">
-            <button className="rounded-md bg-white px-3 py-1.5 text-[#165DFF] shadow-xs">Quick entry</button>
-            <button onClick={() => setDetailedOpen(true)} className="rounded-md px-3 py-1.5 text-[#667085] hover:text-[#111827]">Form</button>
-          </div>
         </div>
 
         <div className="mb-3 flex flex-wrap gap-1.5">
@@ -307,6 +395,11 @@ export default function TodayPage() {
               type="text"
               name="quick-entry-input"
               aria-label="Quick payment input"
+              role="combobox"
+              aria-autocomplete="list"
+              aria-expanded={showSuggestions && commandPayeeSuggestions.length > 0}
+              aria-controls="payee-listbox"
+              aria-activedescendant={suggestionIndex >= 0 ? `payee-suggestion-${suggestionIndex}` : undefined}
               autoComplete="off"
               value={command}
               onChange={(e) => setCommand(e.target.value)}
@@ -319,9 +412,16 @@ export default function TodayPage() {
             />
           </div>
 
+          {preview && command.trim() && (
+            <div className="sr-only">
+              <span>Parsed payment</span>
+              <strong>{preview.payeeName} · {preview.amountPaise === null ? '—' : formatInr(preview.amountPaise)}</strong>
+            </div>
+          )}
+
           {/* New Payee or Duplicate Confirmation Banner */}
           <AnimatePresence>
-            {preview && command.trim() && (preview.isNewPayee || preview.warnings.length > 0) && (
+            {preview && hasAmountInput && (preview.isNewPayee || preview.needsReview) && (
               <motion.div
                 initial={{ opacity: 0, y: -6 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -331,8 +431,10 @@ export default function TodayPage() {
                 <div className="flex items-center gap-2 text-amber-900 font-medium">
                   <AlertTriangle size={16} className="text-amber-600 flex-shrink-0" />
                   <span>
-                    {preview.isNewPayee 
-                      ? `"${preview.payeeName}" is not in your payees list yet. Press Enter again to create it automatically.`
+                    {preview.isNewPayee
+                      ? preview.needsReview
+                        ? `"${preview.payeeName}" is new. It will be created and sent to Review because details are missing.`
+                        : `"${preview.payeeName}" is new and all payment details are complete.`
                       : preview.warnings[0]}
                   </span>
                 </div>
@@ -368,18 +470,31 @@ export default function TodayPage() {
             {showSuggestions && commandPayeeSuggestions.length > 0 && (
               <motion.div
                 ref={dropdownRef}
+                id="payee-listbox"
+                role="listbox"
                 initial={{ opacity: 0, y: -2 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -2 }}
                 transition={{ duration: 0.12 }}
                 className="mt-2 border-t border-[#E5E7EB] pt-2"
               >
+                <div className="mb-1.5 flex items-center justify-between px-1 text-xs text-[#667085]">
+                  <span className="font-semibold">
+                    {(command.split(/\d/)[0] ?? '').trim().split(/\s+/).length > 1
+                      ? `Did you mean ${commandPayeeSuggestions[0]?.name}?`
+                      : 'Matching payees'}
+                  </span>
+                  <span>↑↓ choose · Tab or Enter select · Esc keep new name</span>
+                </div>
                 <div className="grid grid-cols-1 gap-1 md:grid-cols-2 xl:grid-cols-4">
                   {commandPayeeSuggestions.map((payee, idx) => {
                     const isSelected = idx === suggestionIndex;
                     return (
                       <button
                         type="button"
+                        role="option"
+                        aria-selected={isSelected}
+                        id={`payee-suggestion-${idx}`}
                         key={payee.id}
                         onClick={() => applyPayeeSuggestion(payee)}
                         onMouseEnter={() => setSuggestionIndex(idx)}
@@ -413,7 +528,7 @@ export default function TodayPage() {
               ) : preview.payeeId ? (
                 <span>This is the first recorded payment for this payee.</span>
               ) : (
-                <span>{preview.errors[0] || 'Choose a payee, then add an amount.'}</span>
+                <span>{hasAmountInput ? (preview.errors[0] || 'Choose a payee, then add an amount.') : 'Add an amount to continue.'}</span>
               )}
               {preview.categoryName && <span> Suggested category: <strong className="font-semibold text-[#111827]">{preview.categoryName}</strong>.</span>}
               {!preview.amountPaise && preview.payeeId && (
@@ -421,8 +536,13 @@ export default function TodayPage() {
               )}
             </div>
             <div className="flex items-center gap-2">
-              <button onClick={() => setDetailedOpen(true)} className="btn btn-secondary h-8 px-3 text-xs">Edit</button>
-              <button onClick={() => executeSave(newPayeeConfirmed, duplicateConfirmed)} disabled={!preview.valid || saving} className="btn btn-primary h-8 px-3 text-xs">{saving ? 'Saving…' : 'Save payment'}</button>
+              <button
+                onClick={() => window.dispatchEvent(new CustomEvent('payment-ledger:open-detailed-entry'))}
+                className="btn btn-secondary h-8 px-3 text-xs"
+              >
+                Edit
+              </button>
+              <button onClick={handleSaveAttempt} disabled={!preview.valid || saving} className="btn btn-primary h-8 px-3 text-xs">{saving ? 'Saving…' : 'Save payment'}</button>
             </div>
           </div>
         )}
@@ -485,40 +605,50 @@ export default function TodayPage() {
           <strong className="mt-1 block tabular-nums text-lg text-[#111827]">{formatInr(dashboard?.digitalPaise || 0)}</strong>
           <span className="mt-1 block text-xs text-[#667085]">UPI, bank and cheque</span>
         </div>
-        <button onClick={() => window.location.assign('/review')} className="ledger-card p-4 text-left hover:border-amber-300 hover:shadow-md">
+        <button onClick={() => navigate('/review')} className="ledger-card p-4 text-left hover:border-amber-300 hover:shadow-md">
           <span className="flex items-center gap-1.5 text-xs font-semibold text-[#667085]"><AlertTriangle size={14} /> Needs review</span>
           <strong className={`mt-1 block tabular-nums text-lg ${dashboard?.reviewCount ? 'text-amber-700' : 'text-[#111827]'}`}>{dashboard?.reviewCount || 0}</strong>
           <span className="mt-1 block text-xs text-[#667085]">Open review queue</span>
         </button>
       </div>
 
+      {dashboard && (
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-1 px-1 text-xs text-[#667085]">
+          <span>Largest today <strong className="text-[#111827]">{formatInr(dashboard.largestPaymentPaise)}</strong></span>
+          <span><strong className="text-[#111827]">{dashboard.uniquePayeeCount}</strong> unique payees</span>
+          <span>Month <strong className="text-[#111827]">{formatInr(dashboard.monthTotalPaise)}</strong></span>
+          <span>Average active day <strong className="text-[#111827]">{formatInr(dashboard.averageActiveDayPaise)}</strong></span>
+        </div>
+      )}
+
       {/* SECTION 3: OUTLAY LEDGER TABLE */}
       <div className="ledger-card bg-white p-0 border border-[#DDE3EC] rounded-2xl overflow-hidden">
-        <div className="p-4 border-b border-[#DDE3EC] flex items-center justify-between bg-white">
-          <div>
-            <h2 className="text-base font-bold text-[#111827]">Today’s transactions</h2>
-            <p className="text-xs text-[#667085] mt-0.5">
-              {todaysItems.length} transactions recorded for {todayDate}
-            </p>
-          </div>
-        </div>
-
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-[#F6F8FC] border-b border-[#DDE3EC] text-xs uppercase font-bold text-[#667085]">
+          <table className="notion-table table-fixed">
+            <colgroup>
+              <col className="w-[15%]" />
+              <col className="w-[29%]" />
+              <col className="w-[14%]" />
+              <col className="w-[11%]" />
+              <col className="w-[10%]" />
+              <col className="w-[13%]" />
+              <col className="w-[8%]" />
+            </colgroup>
+            <thead>
               <tr>
-                <th className="py-3 px-5 text-right">Amount</th>
-                <th className="py-3 px-5">Time</th>
-                <th className="py-3 px-5">Payee</th>
-                <th className="py-3 px-5">Category</th>
-                <th className="py-3 px-5">Method</th>
-                <th className="py-3 px-5">Status</th>
+                <th>Date & Time</th>
+                <th>Payee</th>
+                <th>Category</th>
+                <th className="text-center">Method</th>
+                <th className="text-center">Status</th>
+                <th className="text-right">Money</th>
+                <th className="text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#DDE3EC]">
               {todaysItems.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-12 text-center text-[#667085]">
+                  <td colSpan={7} className="py-12 text-center text-[#667085]">
                     <Inbox size={32} className="mx-auto mb-2 opacity-50" />
                     <p className="font-semibold">No payments recorded today</p>
                     <p className="text-xs mt-1">Use the quick entry bar above to log a payment.</p>
@@ -526,23 +656,24 @@ export default function TodayPage() {
                 </tr>
               ) : (
                 todaysItems.map((item) => {
+                  const isVoided = item.status === 'voided';
                   return (
                     <tr
                       key={item.id}
-                      onClick={() => setSelectedTransaction(item)}
+                      onClick={() => {
+                        setDrawerInitialEdit(false);
+                        setSelectedTransaction(item);
+                      }}
                       className="hover:bg-[#F6F8FC] cursor-pointer transition-colors group"
                     >
-                      <td className="py-3 px-4 text-right font-bold text-sm text-[#111827] tabular-nums">
-                        {formatInr(item.amountPaise)}
+                      <td className="py-3.5 px-5 text-xs text-[#667085] font-semibold whitespace-nowrap">
+                        Today, {formatTime12(item.transactionTime)}
                       </td>
-                      <td className="py-3 px-4 text-xs text-[#667085] font-medium whitespace-nowrap">
-                        {formatTime12(item.transactionTime)}
-                      </td>
-                      <td className="py-3 px-4">
+                      <td className="py-3.5 px-5 overflow-hidden">
                         <div className="flex items-center gap-2.5">
                           <PayeeAvatar name={item.payeeName} size={30} />
-                          <div>
-                            <span className="font-bold text-[#111827] group-hover:text-[#165DFF] transition-colors">
+                          <div className="min-w-0">
+                            <span className="block truncate font-bold text-[#111827] group-hover:text-[#165DFF] transition-colors text-sm">
                               {item.payeeName}
                             </span>
                             {item.note && (
@@ -553,23 +684,64 @@ export default function TodayPage() {
                           </div>
                         </div>
                       </td>
-                      <td className="py-3 px-4">
+                      <td className="py-3.5 px-5 text-center">
                         {item.categoryName ? (
-                          <span className="text-sm text-slate-700">{item.categoryName}</span>
+                          <span className="px-2 py-0.5 text-xs font-medium bg-slate-100 text-slate-800 rounded-md">
+                            {item.categoryName}
+                          </span>
                         ) : (
-                          <span className="px-2.5 py-1 text-xs font-semibold rounded-full bg-amber-100 text-amber-800 border border-amber-200">
+                          <span className="px-2 py-0.5 text-xs font-semibold bg-amber-50 text-amber-700 rounded-md border border-amber-200">
                             Uncategorised
                           </span>
                         )}
                       </td>
-                      <td className="py-3 px-4">
-                        <span className="text-sm text-slate-700">{item.paymentMethodName || 'Cash'}</span>
+                      <td className="py-3.5 px-5 text-center">
+                        <span className="text-xs font-medium text-slate-700">{item.paymentMethodName || 'Cash'}</span>
                       </td>
-                      <td className="py-3 px-4">
+                      <td className="py-3.5 px-5 text-center">
                         <StatusPill
                           variant={item.status === 'voided' ? 'gray' : item.needsReview ? 'amber' : 'green'}
                           label={item.status === 'voided' ? 'Voided' : item.needsReview ? 'Review' : 'Posted'}
                         />
+                      </td>
+                      <td className="py-3.5 px-5 text-right font-black tabular-nums text-base text-[#111827]">
+                        {isVoided && <span className="line-through text-rose-500 mr-2">{formatInr(item.amountPaise)}</span>}
+                        {!isVoided && formatInr(item.amountPaise)}
+                      </td>
+                      <td className="py-3.5 px-5 text-right" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            onClick={() => {
+                              setDrawerInitialEdit(true);
+                              setSelectedTransaction(item);
+                            }}
+                            className="p-1.5 text-slate-500 hover:text-[#165DFF] hover:bg-[#E9F1FF] rounded-lg transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                            title="Edit transaction"
+                            disabled={isVoided}
+                          >
+                            <Edit size={14} />
+                          </button>
+                          <button
+                            onClick={() => setVoidConfirmTx(item)}
+                            className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                            title="Void transaction"
+                            disabled={isVoided}
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                          {item.needsReview && (
+                            <button
+                              onClick={() => {
+                                setReviewTransaction(item);
+                                setReviewOpen(true);
+                              }}
+                              className="px-2 py-1 text-[10px] font-bold bg-amber-50 text-amber-700 hover:bg-amber-100 rounded border border-amber-200 transition-colors cursor-pointer"
+                              title="Review transaction rules"
+                            >
+                              Review
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -584,18 +756,15 @@ export default function TodayPage() {
       {selectedTransaction && (
         <TransactionDrawer
           transaction={selectedTransaction}
-          onClose={() => setSelectedTransaction(null)}
+          initialEdit={drawerInitialEdit}
+          onClose={() => {
+            setSelectedTransaction(null);
+            setDrawerInitialEdit(false);
+          }}
         />
       )}
 
-      {detailedOpen && (
-        <DetailedEntryDrawer
-          open={detailedOpen}
-          onClose={() => setDetailedOpen(false)}
-          master={master!}
-          onSaved={handleRefresh}
-        />
-      )}
+
 
       {reviewOpen && reviewTransaction && (
         <QuickReviewModal
@@ -609,6 +778,60 @@ export default function TodayPage() {
           onSaved={handleRefresh}
         />
       )}
+
+      {/* Confirmation Modals */}
+      <ConfirmModal
+        isOpen={quickAddConfirmOpen}
+        title={preview?.isNewPayee ? 'Create payee and record payment?' : 'Record this payment?'}
+        description={duplicateConfirmed ? `${duplicateReason || 'A similar payment was recorded recently.'} Press Enter to save it anyway.` : 'Check the details, then press Enter to record.'}
+        type="success"
+        confirmText="Record Transaction"
+        previewData={preview ? {
+          'Payee': preview.payeeName,
+          'Amount': preview.amountPaise === null ? '—' : formatInr(preview.amountPaise),
+          'Category': preview.categoryName || 'Auto/Uncategorised',
+          'Payment Method': preview.paymentMethodName || 'Cash',
+          'Date': preview.transactionDate || 'Today',
+          'Note': preview.note || 'None',
+          ...(preview.warnings.some((warning) => warning.startsWith('Unusually high'))
+            ? { 'Notice': preview.warnings.find((warning) => warning.startsWith('Unusually high')) }
+            : {})
+        } : undefined}
+        onConfirm={async () => {
+          await executeSave(preview?.isNewPayee ? true : newPayeeConfirmed, duplicateConfirmed);
+        }}
+        onCancel={() => setQuickAddConfirmOpen(false)}
+      />
+
+      <ConfirmModal
+        isOpen={!!voidConfirmTx}
+        title="Void this Transaction?"
+        description="Voiding this transaction is permanent and cannot be undone. Please review details before confirming."
+        type="danger"
+        confirmText="Void Transaction"
+        previewData={voidConfirmTx ? {
+          'Payee': voidConfirmTx.payeeName,
+          'Amount': formatInr(voidConfirmTx.amountPaise),
+          'Category': voidConfirmTx.categoryName || 'Uncategorised',
+          'Payment Method': voidConfirmTx.paymentMethodName || 'Cash',
+          'Date': `Today, ${formatTime12(voidConfirmTx.transactionTime)}`,
+          'Note': voidConfirmTx.note || 'None'
+        } : undefined}
+        onConfirm={async () => {
+          if (!voidConfirmTx) return;
+          try {
+            await post(`/transactions/${voidConfirmTx.id}/void`, { reason: 'Voided from Today after user review' });
+            await refetchTransactions();
+            await refetchDashboard();
+            toast.success('Transaction voided successfully');
+          } catch (err: any) {
+            toast.error(err.message || 'Failed to void transaction');
+          } finally {
+            setVoidConfirmTx(null);
+          }
+        }}
+        onCancel={() => setVoidConfirmTx(null)}
+      />
     </div>
   );
 }

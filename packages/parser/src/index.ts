@@ -95,11 +95,41 @@ function normalizeCommand(value: string): string {
 }
 
 function removePhrase(command: string, phrase: string): string {
-  return normalizeCommand(` ${command} `.replace(` ${phrase} `, ' '));
+  const normalizedCommand = normalizeCommand(command);
+  const normalizedPhrase = normalizeCommand(phrase);
+  return normalizeCommand(` ${normalizedCommand} `.replace(` ${normalizedPhrase} `, ' '));
+}
+
+function titleCasePayeeName(value: string): string {
+  return value
+    .split(' ')
+    .filter(Boolean)
+    .map((word) => `${word.charAt(0).toLocaleUpperCase('en-IN')}${word.slice(1)}`)
+    .join(' ');
+}
+
+function extractNotes(command: string): { commandToParse: string; explicitNote: string } {
+  const separatorIndex = command.indexOf('//');
+  const beforeSeparator = separatorIndex === -1 ? command : command.slice(0, separatorIndex);
+  const notes: string[] = [];
+  if (separatorIndex !== -1) {
+    const trailingNote = command.slice(separatorIndex + 2).trim();
+    if (trailingNote) notes.push(trailingNote);
+  }
+
+  const commandToParse = beforeSeparator.replace(/["“]([^"”]+)["”]/g, (_match, note: string) => {
+    const cleaned = note.trim();
+    if (cleaned) notes.unshift(cleaned);
+    return ' ';
+  });
+
+  return { commandToParse, explicitNote: notes.join(' ').trim() };
 }
 
 export function parseQuickEntry(command: string, context: QuickEntryContext): QuickEntryPreview {
-  let remaining = normalizeCommand(command);
+  const { commandToParse, explicitNote } = extractNotes(command);
+
+  let remaining = normalizeCommand(commandToParse);
   const errors: string[] = [];
   const warnings: string[] = [];
 
@@ -134,15 +164,20 @@ export function parseQuickEntry(command: string, context: QuickEntryContext): Qu
     .filter(Boolean)
     .map((token) => ({ token, amountPaise: parseAmountTokenToPaise(token) }))
     .filter((match): match is { token: string; amountPaise: number } => match.amountPaise !== null);
-  const amount = amountMatches.length === 1 ? amountMatches[0] : undefined;
-  if (!amount)
-    errors.push(amountMatches.length > 1 ? 'More than one amount found' : 'No valid amount found');
-  if (amount) remaining = removePhrase(remaining, amount.token);
+  const amount = amountMatches[0];
+  if (!amount) {
+    errors.push('No valid amount found');
+  } else {
+    if (amount.amountPaise > 5000000000) {
+      errors.push('Amount exceeds ₹50,00,000 limit');
+    }
+    remaining = removePhrase(remaining, amount.token);
+  }
 
   let newPayeeName: string | null = null;
   let forceNewPayee = false;
   if (payee && amount) {
-    const normalizedOriginal = normalizeCommand(command);
+    const normalizedOriginal = normalizeCommand(commandToParse);
     const amountPosition = normalizedOriginal.indexOf(amount.token);
     let identityPrefix =
       amountPosition >= 0 ? normalizedOriginal.slice(0, amountPosition).trim() : '';
@@ -157,11 +192,13 @@ export function parseQuickEntry(command: string, context: QuickEntryContext): Qu
     }
   }
   if (!payee && (payeeIds.size === 0 || forceNewPayee) && amount) {
-    const amountPosition = normalizeCommand(command).indexOf(amount.token);
+    const amountPosition = normalizeCommand(commandToParse).indexOf(amount.token);
     let prefix =
-      amountPosition >= 0 ? normalizeCommand(command).slice(0, amountPosition).trim() : '';
+      amountPosition >= 0 ? normalizeCommand(commandToParse).slice(0, amountPosition).trim() : '';
     if (prefix.length >= 2 && !parseAmountTokenToPaise(prefix)) {
-      newPayeeName = prefix.replace(/\b(?:today|yesterday)\b/gi, '').trim();
+      newPayeeName = titleCasePayeeName(
+        prefix.replace(/\b(?:today|yesterday)\b/gi, '').trim()
+      );
       if (newPayeeName) remaining = removePhrase(remaining, newPayeeName);
     }
     if (!newPayeeName) errors.push('Enter a payee name before the amount');
@@ -177,8 +214,7 @@ export function parseQuickEntry(command: string, context: QuickEntryContext): Qu
   if (explicitMethod) remaining = removePhrase(remaining, explicitMethod.alias);
   const cashMethod = context.paymentMethods.find((method) => method.code === 'cash');
   // Cash is the desk-wide default. A different method must be written explicitly.
-  const paymentMethodId =
-    explicitMethod?.method.id ?? payee?.defaultPaymentMethodId ?? cashMethod?.id ?? null;
+  const paymentMethodId = explicitMethod?.method.id ?? cashMethod?.id ?? null;
   const paymentMethod = context.paymentMethods.find((method) => method.id === paymentMethodId);
 
   const categoryMatches = context.categories
@@ -193,10 +229,15 @@ export function parseQuickEntry(command: string, context: QuickEntryContext): Qu
   const categoryId = category?.id ?? payee?.defaultCategoryId ?? null;
   const resolvedCategory = context.categories.find((entry) => entry.id === categoryId);
 
-  if (newPayeeName) warnings.push('New payee created from quick entry');
+  if (newPayeeName) warnings.push('New payee will be created');
   if (!paymentMethodId) warnings.push('Payment method needs review');
   if (!categoryId) warnings.push('Category needs review');
-  const needsReview = warnings.length > 0;
+  const needsReview = !paymentMethodId || !categoryId;
+
+  let finalNote = remaining;
+  if (explicitNote) {
+    finalNote = finalNote ? `${explicitNote} ${finalNote}` : explicitNote;
+  }
 
   return {
     command,
@@ -211,7 +252,7 @@ export function parseQuickEntry(command: string, context: QuickEntryContext): Qu
     paymentMethodName: paymentMethod?.displayName ?? null,
     transactionDate: null,
     transactionTime: null,
-    note: remaining || null,
+    note: finalNote || null,
     needsReview,
     errors,
     warnings

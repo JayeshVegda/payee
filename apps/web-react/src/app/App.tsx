@@ -12,7 +12,7 @@ export default function App() {
       <QueryClientProvider client={queryClient}>
         <BrowserRouter>
           <AppRouter />
-          <Toaster richColors position="bottom-right" />
+          <Toaster richColors position="top-right" />
         </BrowserRouter>
       </QueryClientProvider>
     </AppErrorBoundary>
